@@ -320,3 +320,18 @@ code, pre { font-family: var(--font-mono); }
 .signed-in { margin-bottom: 0.9rem; font-size: 0.78rem; line-height: 1.6; }
 .signed-in strong { color: var(--text); }
 .logout-form { margin-top: 0.15rem; }
+
+/* ---------- Status / diagnostics ---------- */
+
+.status-summary { display: inline-flex; gap: 0.6rem; align-items: center; }
+.status-cell { width: 64px; vertical-align: top; }
+.status-detail { font-size: 0.8rem; margin-top: 0.2rem; word-break: break-word; }
+
+.st {
+    display: inline-block; font-family: var(--font-mono); font-size: 0.68rem; font-weight: 700;
+    letter-spacing: 0.04em; padding: 0.15rem 0.5rem; border-radius: 6px; border: 1px solid transparent;
+}
+.st-ok { background: var(--teal-soft); color: var(--teal); border-color: rgba(45, 212, 167, 0.3); }
+.st-warn { background: var(--amber-soft); color: var(--amber); border-color: rgba(245, 183, 61, 0.3); }
+.st-err { background: var(--coral-soft); color: var(--coral); border-color: rgba(240, 104, 96, 0.3); }
+.st-info { background: var(--violet-soft); color: var(--violet); border-color: rgba(139, 124, 246, 0.3); }

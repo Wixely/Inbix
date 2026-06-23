@@ -6,6 +6,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" />
+    <PackageReference Include="DnsClient" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Inbix.Core\Inbix.Core.csproj" />

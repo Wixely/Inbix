@@ -25,6 +25,7 @@ notice and any upstream NOTICE files be preserved when redistributing binaries:
 
 - Dapper — © .NET Foundation and Contributors / Stack Exchange
 - SQLitePCLRaw (core, bundle_e_sqlite3, lib.e_sqlite3, provider.e_sqlite3) — © Eric Sink / SourceGear
+- DnsClient.NET — © Michael Conrad (used by the status page for MX/A/PTR lookups)
 
 ## Public domain
 

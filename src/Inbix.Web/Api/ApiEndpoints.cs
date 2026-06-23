@@ -2,6 +2,7 @@ using Inbix.Core.Abstractions;
 using Inbix.Core.Domain;
 using Inbix.Core.Options;
 using Inbix.Core.Validation;
+using Inbix.Web.Diagnostics;
 using Microsoft.Extensions.Options;
 
 namespace Inbix.Web.Api;
@@ -100,6 +101,10 @@ public static class ApiEndpoints
         // --- Audit ---
         api.MapGet("/audit", async (IAuditRepository repo, int? limit, int? offset, CancellationToken ct) =>
             Results.Ok(await repo.ListAsync(Math.Clamp(limit ?? 100, 1, 500), Math.Max(0, offset ?? 0), ct)));
+
+        // --- Diagnostics ---
+        api.MapGet("/diagnostics", async (DiagnosticsService diagnostics, CancellationToken ct) =>
+            Results.Ok(await diagnostics.RunAllAsync(ct)));
 
         // --- Backups ---
         api.MapGet("/backups", (IBackupService backup) => Results.Ok(backup.ListBackups()));

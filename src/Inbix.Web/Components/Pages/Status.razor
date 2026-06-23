@@ -1,0 +1,89 @@
+@page "/status"
+@rendermode InteractiveServer
+@using Inbix.Web.Diagnostics
+@inject DiagnosticsService Diagnostics
+
+<h1>Status</h1>
+<p class="lead">Run configuration diagnostics to catch common inbound-mail misconfigurations — database,
+storage, aliases, TLS, the SMTP listener, and DNS (public IP, MX records, MX→IP match, reverse DNS).</p>
+
+<div class="btn-row">
+    <button class="btn btn-primary" @onclick="RunAsync" disabled="@_running">
+        @(_running ? "Running…" : (_results is null ? "Run diagnostics" : "Re-run"))
+    </button>
+    @if (_results is not null)
+    {
+        <span class="status-summary">
+            <span class="st st-ok">@_results.Count(r => r.Status == DiagnosticStatus.Ok) OK</span>
+            <span class="st st-warn">@_results.Count(r => r.Status == DiagnosticStatus.Warning) warnings</span>
+            <span class="st st-err">@_results.Count(r => r.Status == DiagnosticStatus.Error) failures</span>
+        </span>
+    }
+</div>
+
+@if (_running && _results is null)
+{
+    <p class="muted">Running checks (DNS lookups may take a few seconds)…</p>
+}
+
+@if (_results is not null)
+{
+    @foreach (var group in _results.GroupBy(r => r.Category))
+    {
+        <div class="panel">
+            <h2>@group.Key</h2>
+            <table class="grid">
+                <tbody>
+                    @foreach (var r in group)
+                    {
+                        <tr>
+                            <td class="status-cell"><span class="st @CssFor(r.Status)">@LabelFor(r.Status)</span></td>
+                            <td><strong>@r.Name</strong></td>
+                            <td>
+                                @r.Message
+                                @if (!string.IsNullOrEmpty(r.Detail))
+                                {
+                                    <div class="muted status-detail">@r.Detail</div>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+}
+
+@code {
+    private IReadOnlyList<DiagnosticResult>? _results;
+    private bool _running;
+
+    private async Task RunAsync()
+    {
+        _running = true;
+        try
+        {
+            _results = await Diagnostics.RunAllAsync();
+        }
+        finally
+        {
+            _running = false;
+        }
+    }
+
+    private static string CssFor(DiagnosticStatus s) => s switch
+    {
+        DiagnosticStatus.Ok => "st-ok",
+        DiagnosticStatus.Warning => "st-warn",
+        DiagnosticStatus.Error => "st-err",
+        _ => "st-info"
+    };
+
+    private static string LabelFor(DiagnosticStatus s) => s switch
+    {
+        DiagnosticStatus.Ok => "OK",
+        DiagnosticStatus.Warning => "WARN",
+        DiagnosticStatus.Error => "FAIL",
+        _ => "INFO"
+    };
+}

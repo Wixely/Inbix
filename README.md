@@ -84,6 +84,7 @@ using the `__` separator (e.g. `Inbix__Smtp__Port=2525`).
 | `Inbix:Backups:Directory` | `./data/backups` | Where backup files are written |
 | `Inbix:Backups:IntervalHours` / `RetentionCount` | `24` / `7` | Backup cadence / how many to keep |
 | `Inbix:RequireHttps` | `false` | HTTP→HTTPS redirect, HSTS, forwarded-proto, Secure cookie |
+| `Inbix:Diagnostics:PublicIpLookupUrl` | `https://checkip.amazonaws.com` | Public-IP probe for the status page; empty to disable |
 | `Inbix:Admin:Username` | `admin` | Admin login username |
 | `Inbix:Admin:Password` | _(empty)_ | Admin password (plaintext; prefer `PasswordHash`) |
 | `Inbix:Admin:PasswordHash` | _(empty)_ | PBKDF2 hash (preferred); see below |
@@ -117,6 +118,9 @@ GET    /api/messages/{id}/raw       (downloads .eml)
 GET    /api/messages/{id}/attachments
 GET    /api/attachments/{id}/content
 GET    /api/audit
+GET    /api/diagnostics            (same checks as the Status page, as JSON)
+GET    /api/backups
+POST   /api/backups
 ```
 
 OpenAPI document is served at `/openapi/v1.json` in Development.
@@ -131,6 +135,21 @@ Two unauthenticated endpoints for monitors / orchestrators:
 | `GET /health/ready` | Readiness — returns 503 unless the database is reachable. |
 
 The Docker image has a `HEALTHCHECK` that polls `/health/ready`.
+
+## Status / diagnostics page
+
+The **Status** page (`/status`) runs on-demand configuration diagnostics to catch common
+inbound-mail misconfigurations:
+
+- Database reachable + migrations applied; raw storage writable; backups present/fresh.
+- Domains configured; at least one enabled alias.
+- Admin password set; HTTPS enabled; STARTTLS certificate valid / expiry.
+- SMTP listener accepting connections (locally).
+- **DNS:** public IP (via `Inbix:Diagnostics:PublicIpLookupUrl`), MX records per domain, whether the
+  primary MX host resolves to this server's public IP, and reverse DNS (PTR) for the public IP.
+
+DNS lookups use [DnsClient.NET](https://github.com/MichaCo/DnsClient.NET) (Apache-2.0). Set
+`Inbix:Diagnostics:PublicIpLookupUrl` to empty to skip the outbound public-IP probe.
 
 ## Backups & restore
 

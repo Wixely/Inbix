@@ -21,6 +21,7 @@ public sealed class InbixOptions
     public AdminOptions Admin { get; set; } = new();
     public WorkerOptions Worker { get; set; } = new();
     public BackupOptions Backups { get; set; } = new();
+    public DiagnosticsOptions Diagnostics { get; set; } = new();
 }
 
 /// <summary>Database provider selection. SQLite is the default; an external DB can be slotted in later.</summary>
@@ -86,6 +87,16 @@ public sealed class WorkerOptions
 
     /// <summary>Number of unparsed messages to claim per poll.</summary>
     public int BatchSize { get; set; } = 20;
+}
+
+/// <summary>Settings for the diagnostics / status page.</summary>
+public sealed class DiagnosticsOptions
+{
+    /// <summary>
+    /// URL of a plain-text "what is my public IP" service, used to compare the public IP against
+    /// the MX target. Set empty to skip the outbound public-IP lookup.
+    /// </summary>
+    public string PublicIpLookupUrl { get; set; } = "https://checkip.amazonaws.com";
 }
 
 /// <summary>Admin UI / API authentication.</summary>

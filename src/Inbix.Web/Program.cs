@@ -91,6 +91,15 @@ builder.Services.AddRateLimiter(options =>
 builder.Services.AddHealthChecks()
     .AddCheck<DatabaseHealthCheck>("database", tags: ["ready"]);
 
+// Diagnostics (status page): DNS lookups + public-IP probe.
+builder.Services.AddHttpClient();
+builder.Services.AddSingleton<DnsClient.ILookupClient>(_ => new DnsClient.LookupClient());
+builder.Services.AddSingleton<Inbix.Web.Diagnostics.DiagnosticsService>();
+
+// Serialize enums as strings in API responses (e.g. diagnostic status "Ok"/"Warning").
+builder.Services.ConfigureHttpJsonOptions(o =>
+    o.SerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter()));
+
 // Web: API + Blazor UI.
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 builder.Services.AddOpenApi();
