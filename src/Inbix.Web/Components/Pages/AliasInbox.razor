@@ -1,0 +1,66 @@
+@page "/aliases/{AliasId:long}/inbox"
+@inject IAliasRepository AliasRepo
+@inject IMessageRepository Messages
+
+<h1>Inbox</h1>
+
+@if (_alias is null)
+{
+    <p>Loading…</p>
+}
+else
+{
+    <p class="muted"><a href="aliases">← Aliases</a> &nbsp;|&nbsp; <strong>@_alias.Address</strong></p>
+
+    @if (_messages is null || _messages.Count == 0)
+    {
+        <p class="muted">No messages received for this alias yet.</p>
+    }
+    else
+    {
+        <table class="grid">
+            <thead>
+                <tr><th>Received</th><th>From</th><th>Subject</th><th>Size</th><th></th></tr>
+            </thead>
+            <tbody>
+                @foreach (var m in _messages)
+                {
+                    <tr>
+                        <td>@m.ReceivedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                        <td>@(m.Sender ?? "—")</td>
+                        <td>
+                            <a href="@($"messages/{m.Id}")">@(string.IsNullOrWhiteSpace(m.Subject) ? "(no subject)" : m.Subject)</a>
+                            @if (!m.Parsed)
+                            {
+                                <span class="badge off">unparsed</span>
+                            }
+                        </td>
+                        <td>@FormatSize(m.SizeBytes)</td>
+                        <td><a class="btn-link" href="@($"api/messages/{m.Id}/raw")" target="_blank">raw</a></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+}
+
+@code {
+    [Parameter] public long AliasId { get; set; }
+
+    private Alias? _alias;
+    private IReadOnlyList<Message>? _messages;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _alias = await AliasRepo.GetByIdAsync(AliasId);
+        if (_alias is not null)
+            _messages = await Messages.ListByAliasAsync(AliasId, 100, 0);
+    }
+
+    private static string FormatSize(long bytes) => bytes switch
+    {
+        < 1024 => $"{bytes} B",
+        < 1024 * 1024 => $"{bytes / 1024.0:0.#} KB",
+        _ => $"{bytes / (1024.0 * 1024.0):0.#} MB"
+    };
+}

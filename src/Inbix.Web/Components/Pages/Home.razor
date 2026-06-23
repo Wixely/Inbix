@@ -1,0 +1,26 @@
+@page "/"
+@inject IAliasRepository Aliases
+
+<h1>Dashboard</h1>
+
+<div class="cards">
+    <div class="card">
+        <div class="card-value">@(_aliases?.Count.ToString() ?? "…")</div>
+        <div class="card-label">Aliases</div>
+    </div>
+    <div class="card">
+        <div class="card-value">@(_aliases?.Count(a => a.Enabled).ToString() ?? "…")</div>
+        <div class="card-label">Enabled</div>
+    </div>
+</div>
+
+<p class="muted">Inbox-only alias mail server. Create permanent aliases, then point your domain's MX record here to receive mail.</p>
+
+<p><a class="btn" href="aliases">Manage aliases →</a></p>
+
+@code {
+    private IReadOnlyList<Alias>? _aliases;
+
+    protected override async Task OnInitializedAsync()
+        => _aliases = await Aliases.ListAsync();
+}

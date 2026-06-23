@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Inbix.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Microsoft.Data.Sqlite" />
+    <PackageReference Include="MimeKit" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Inbix.Core\Inbix.Core.csproj" />
+    <ProjectReference Include="..\..\src\Inbix.Data\Inbix.Data.csproj" />
+    <ProjectReference Include="..\..\src\Inbix.Worker\Inbix.Worker.csproj" />
+  </ItemGroup>
+</Project>

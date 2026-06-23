@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Inbix.Core/Inbix.Core.csproj" />
+    <Project Path="src/Inbix.Data/Inbix.Data.csproj" />
+    <Project Path="src/Inbix.Smtp/Inbix.Smtp.csproj" />
+    <Project Path="src/Inbix.Web/Inbix.Web.csproj" />
+    <Project Path="src/Inbix.Worker/Inbix.Worker.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Inbix.Tests/Inbix.Tests.csproj" />
+  </Folder>
+</Solution>

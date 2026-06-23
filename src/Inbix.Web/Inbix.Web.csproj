@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <RootNamespace>Inbix.Web</RootNamespace>
+    <UserSecretsId>inbix-web</UserSecretsId>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Inbix.Core\Inbix.Core.csproj" />
+    <ProjectReference Include="..\Inbix.Data\Inbix.Data.csproj" />
+    <ProjectReference Include="..\Inbix.Smtp\Inbix.Smtp.csproj" />
+    <ProjectReference Include="..\Inbix.Worker\Inbix.Worker.csproj" />
+  </ItemGroup>
+</Project>

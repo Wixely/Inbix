@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Inbix.Smtp</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="SmtpServer" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Inbix.Core\Inbix.Core.csproj" />
+  </ItemGroup>
+</Project>

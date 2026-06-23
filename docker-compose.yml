@@ -1,0 +1,33 @@
+# Sample Docker Compose for Inbix.
+# Copy/adjust the environment values, then: docker compose up -d --build
+services:
+  inbix:
+    build: .
+    image: inbix:local
+    container_name: inbix
+    restart: unless-stopped
+    ports:
+      - "25:25"      # inbound SMTP (must be reachable from the internet for real mail)
+      - "8080:8080"  # web UI + API (keep this behind a VPN / reverse proxy in production)
+    environment:
+      # Domains this instance accepts mail for (double-underscore = nested config).
+      Inbix__Domains__0: "mydomain.com"
+
+      # SMTP listener.
+      Inbix__Smtp__Port: "25"
+      Inbix__Smtp__ServerName: "mail.mydomain.com"
+      Inbix__Smtp__MaxMessageSizeBytes: "26214400"
+
+      # Storage (mapped to the named volume below).
+      Inbix__Database__ConnectionString: "Data Source=/data/inbix.db"
+      Inbix__Storage__RawPath: "/data/raw"
+
+      # Protect the API with a key (leave empty to disable). The UI should still be network-restricted.
+      Inbix__Admin__ApiKey: ""
+
+      ASPNETCORE_ENVIRONMENT: "Production"
+    volumes:
+      - inbix-data:/data
+
+volumes:
+  inbix-data:

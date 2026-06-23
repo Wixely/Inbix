@@ -1,0 +1,99 @@
+@page "/aliases"
+@rendermode InteractiveServer
+@inject IAliasRepository AliasRepo
+@inject IAuditRepository Audit
+@inject IOptions<InbixOptions> Options
+
+<h1>Aliases</h1>
+
+<div class="panel">
+    <h2>Create alias</h2>
+    <div class="form-row">
+        <input class="input" placeholder="local part (e.g. spotify)" @bind="_newLocalPart" />
+        <span class="at">@@@DefaultDomain</span>
+        <input class="input" placeholder="notes (optional)" @bind="_newNotes" />
+        <button class="btn" @onclick="CreateAsync" disabled="@_busy">Add</button>
+    </div>
+    @if (_error is not null)
+    {
+        <p class="error">@_error</p>
+    }
+</div>
+
+@if (_aliases is null)
+{
+    <p>Loading…</p>
+}
+else if (_aliases.Count == 0)
+{
+    <p class="muted">No aliases yet. Create one above.</p>
+}
+else
+{
+    <table class="grid">
+        <thead>
+            <tr><th>Address</th><th>Status</th><th>Created</th><th>Notes</th><th></th></tr>
+        </thead>
+        <tbody>
+            @foreach (var a in _aliases)
+            {
+                <tr>
+                    <td><a href="@($"aliases/{a.Id}/inbox")">@a.Address</a></td>
+                    <td><span class="badge @(a.Enabled ? "ok" : "off")">@(a.Enabled ? "enabled" : "disabled")</span></td>
+                    <td>@a.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                    <td class="muted">@a.Notes</td>
+                    <td><button class="btn-link" @onclick="() => ToggleAsync(a)">@(a.Enabled ? "Disable" : "Enable")</button></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private IReadOnlyList<Alias>? _aliases;
+    private string _newLocalPart = string.Empty;
+    private string _newNotes = string.Empty;
+    private string? _error;
+    private bool _busy;
+
+    private string DefaultDomain => Options.Value.Domains.FirstOrDefault() ?? "(no domain configured)";
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync() => _aliases = await AliasRepo.ListAsync();
+
+    private async Task CreateAsync()
+    {
+        _error = null;
+        var error = Inbix.Core.Validation.AliasRules.ValidateLocalPart(_newLocalPart);
+        if (error is not null) { _error = error; return; }
+
+        var domain = Options.Value.Domains.FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(domain)) { _error = "No domain configured (set Inbix:Domains)."; return; }
+
+        _busy = true;
+        try
+        {
+            var localPart = Inbix.Core.Validation.AliasRules.Normalize(_newLocalPart);
+            var created = await AliasRepo.CreateAsync(localPart, domain, string.IsNullOrWhiteSpace(_newNotes) ? null : _newNotes);
+            await Audit.WriteAsync(new AuditEntry { Action = "alias.create", TargetType = "alias", TargetId = created.Id.ToString(), Actor = "ui", CreatedAt = DateTimeOffset.UtcNow });
+            _newLocalPart = string.Empty;
+            _newNotes = string.Empty;
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase)
+                ? "That alias already exists."
+                : ex.Message;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task ToggleAsync(Alias a)
+    {
+        await AliasRepo.UpdateAsync(a.Id, !a.Enabled, null);
+        await Audit.WriteAsync(new AuditEntry { Action = a.Enabled ? "alias.disable" : "alias.enable", TargetType = "alias", TargetId = a.Id.ToString(), Actor = "ui", CreatedAt = DateTimeOffset.UtcNow });
+        await ReloadAsync();
+    }
+}

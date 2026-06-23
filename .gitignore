@@ -1,0 +1,32 @@
+## .NET build output
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+*.user
+*.suo
+.vs/
+
+## Test results
+[Tt]est[Rr]esults/
+*.trx
+coverage/
+*.coverage
+
+## Runtime data (SQLite db + raw MIME/attachments)
+data/
+*.db
+*.db-wal
+*.db-shm
+
+## IDE
+.idea/
+.vscode/*
+# ...but share the project's debug/build configuration.
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/extensions.json
+
+## OS
+.DS_Store
+Thumbs.db
