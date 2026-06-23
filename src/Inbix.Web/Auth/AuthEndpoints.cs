@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Inbix.Web.Auth;
 
@@ -28,7 +29,7 @@ public static class AuthEndpoints
 
             await ctx.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(identity));
             return Results.Redirect(SafeReturnUrl(returnUrl));
-        }).AllowAnonymous();
+        }).AllowAnonymous().RequireRateLimiting("login");
 
         app.MapPost("/auth/logout", async (HttpContext ctx) =>
         {

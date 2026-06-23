@@ -10,6 +10,8 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.RateLimiting;
+using System.Threading.RateLimiting;
 
 // CLI helper: generate a PBKDF2 hash for Inbix:Admin:PasswordHash, then exit.
 //   dotnet run --project src/Inbix.Web -- hash-password "my secret"
@@ -75,6 +77,16 @@ if (requireHttps)
     });
 }
 
+// Throttle admin login to blunt online password guessing (per remote IP).
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("login", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions { PermitLimit = 5, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+});
+
 // Health checks: liveness (process) and readiness (database reachable).
 builder.Services.AddHealthChecks()
     .AddCheck<DatabaseHealthCheck>("database", tags: ["ready"]);
@@ -88,6 +100,16 @@ var app = builder.Build();
 if (!authEnabled)
     app.Logger.LogWarning("Admin authentication is DISABLED: no Inbix:Admin:Password or PasswordHash is configured. The UI and API are open. Set a password before exposing Inbix.");
 
+// Baseline security response headers for the admin UI/API.
+app.Use(async (context, next) =>
+{
+    var headers = context.Response.Headers;
+    headers["X-Content-Type-Options"] = "nosniff";
+    headers["X-Frame-Options"] = "DENY";
+    headers["Referrer-Policy"] = "no-referrer";
+    await next();
+});
+
 if (requireHttps)
 {
     app.UseForwardedHeaders();
@@ -100,6 +122,7 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 
 app.UseStaticFiles();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseMiddleware<ApiKeyMiddleware>();
 app.UseAuthorization();

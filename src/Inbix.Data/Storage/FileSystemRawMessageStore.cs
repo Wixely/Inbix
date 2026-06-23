@@ -55,8 +55,11 @@ public sealed class FileSystemRawMessageStore : IRawMessageStore
     private string ResolveInsideRoot(string relativePath)
     {
         var full = Path.GetFullPath(Path.Combine(_root, relativePath.Replace('/', Path.DirectorySeparatorChar)));
-        // Guard against path traversal escaping the raw root.
-        if (!full.StartsWith(_root, StringComparison.OrdinalIgnoreCase))
+        // Guard against path traversal escaping the raw root. Compare against the root *with* a
+        // trailing separator so a sibling like "<root>-evil" cannot pass a naive prefix check.
+        var rootWithSep = _root.EndsWith(Path.DirectorySeparatorChar) ? _root : _root + Path.DirectorySeparatorChar;
+        if (!string.Equals(full, _root, StringComparison.OrdinalIgnoreCase) &&
+            !full.StartsWith(rootWithSep, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Resolved storage path escapes the raw storage root.");
         return full;
     }

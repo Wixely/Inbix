@@ -8,7 +8,9 @@ namespace Inbix.Web.Auth;
 public static class PasswordHasher
 {
     private const string Prefix = "pbkdf2-sha256";
-    private const int Iterations = 100_000;
+    // OWASP (2023) recommends >= 600k iterations for PBKDF2-HMAC-SHA256. The iteration count is
+    // stored in each hash, so existing hashes keep verifying after this value changes.
+    private const int Iterations = 600_000;
     private const int SaltLength = 16;
     private const int KeyLength = 32;
 
