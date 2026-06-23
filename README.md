@@ -78,6 +78,9 @@ using the `__` separator (e.g. `Inbix__Smtp__Port=2525`).
 | `Inbix:Smtp:CertificatePath` / `CertificatePassword` | _(empty)_ | PFX path to enable STARTTLS |
 | `Inbix:Storage:RawPath` | `./data/raw` | Directory for raw MIME + attachments |
 | `Inbix:Worker:PollSeconds` / `BatchSize` | `5` / `20` | Parser poll interval / batch size |
+| `Inbix:Backups:Enabled` | `false` | Enable scheduled database backups |
+| `Inbix:Backups:Directory` | `./data/backups` | Where backup files are written |
+| `Inbix:Backups:IntervalHours` / `RetentionCount` | `24` / `7` | Backup cadence / how many to keep |
 | `Inbix:RequireHttps` | `false` | HTTP→HTTPS redirect, HSTS, forwarded-proto, Secure cookie |
 | `Inbix:Admin:Username` | `admin` | Admin login username |
 | `Inbix:Admin:Password` | _(empty)_ | Admin password (plaintext; prefer `PasswordHash`) |
@@ -115,6 +118,27 @@ GET    /api/audit
 ```
 
 OpenAPI document is served at `/openapi/v1.json` in Development.
+
+## Backups & restore
+
+Set `Inbix:Backups:Enabled=true` for scheduled backups (default: daily, keep 7). Each backup is a
+**consistent hot snapshot** of the SQLite database taken via SQLite's online backup API — safe to run
+while the server is live (WAL pages included). You can also trigger one on demand:
+
+```bash
+curl -X POST http://localhost:8080/api/backups -H "X-Api-Key: <key>"   # create now
+curl       http://localhost:8080/api/backups -H "X-Api-Key: <key>"     # list
+```
+
+To **restore**, stop Inbix and replace the database file with a backup:
+
+```bash
+cp ./data/backups/inbix-YYYYMMDD-HHMMSS-<id>.db ./data/inbix.db   # remove inbix.db-wal/-shm if present
+```
+
+> Raw MIME and attachments live on disk under `Inbix:Storage:RawPath` (immutable once written).
+> Include that directory in your filesystem backups so restored message rows still resolve to their
+> source files. In Docker, both the DB and raw store are on the `inbix-data` volume.
 
 ## Docker
 

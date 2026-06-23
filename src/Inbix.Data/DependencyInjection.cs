@@ -39,6 +39,10 @@ public static class DependencyInjection
 
         services.AddSingleton<IMigrationRunner, ManifestMigrationRunner>();
 
+        // Register the migration hosted service FIRST so migrations apply before any other hosted
+        // service (backup, SMTP, worker) starts — hosted services run in registration order.
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<Microsoft.Extensions.Hosting.IHostedService, MigrationHostedService>());
+
         services.AddSingleton<IAliasRepository, AliasRepository>();
         services.AddSingleton<IMessageRepository, MessageRepository>();
         services.AddSingleton<ISmtpSessionRepository, SmtpSessionRepository>();
@@ -47,9 +51,8 @@ public static class DependencyInjection
         services.AddSingleton<IRawMessageStore, FileSystemRawMessageStore>();
         services.AddSingleton<IAliasResolver, CachingAliasResolver>();
         services.AddSingleton<IInboundMessageSink, InboundMessageSink>();
-
-        // Run migrations before SMTP/worker hosted services start.
-        services.TryAddEnumerable(ServiceDescriptor.Singleton<Microsoft.Extensions.Hosting.IHostedService, MigrationHostedService>());
+        services.AddSingleton<IBackupService, SqliteBackupService>();
+        services.AddHostedService<BackupHostedService>();
 
         return services;
     }

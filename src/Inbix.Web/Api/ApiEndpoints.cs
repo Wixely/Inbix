@@ -101,6 +101,20 @@ public static class ApiEndpoints
         api.MapGet("/audit", async (IAuditRepository repo, int? limit, int? offset, CancellationToken ct) =>
             Results.Ok(await repo.ListAsync(Math.Clamp(limit ?? 100, 1, 500), Math.Max(0, offset ?? 0), ct)));
 
+        // --- Backups ---
+        api.MapGet("/backups", (IBackupService backup) => Results.Ok(backup.ListBackups()));
+
+        api.MapPost("/backups", async (IBackupService backup, IAuditRepository audit, CancellationToken ct) =>
+        {
+            var info = await backup.CreateBackupAsync(ct);
+            await audit.WriteAsync(new AuditEntry
+            {
+                Action = "backup.create", TargetType = "backup", TargetId = info.FileName,
+                Actor = "api", CreatedAt = DateTimeOffset.UtcNow
+            }, ct);
+            return Results.Ok(info);
+        });
+
         return app;
     }
 }

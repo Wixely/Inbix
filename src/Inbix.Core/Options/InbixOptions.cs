@@ -20,6 +20,7 @@ public sealed class InbixOptions
     public StorageOptions Storage { get; set; } = new();
     public AdminOptions Admin { get; set; } = new();
     public WorkerOptions Worker { get; set; } = new();
+    public BackupOptions Backups { get; set; } = new();
 }
 
 /// <summary>Database provider selection. SQLite is the default; an external DB can be slotted in later.</summary>
@@ -58,6 +59,21 @@ public sealed class StorageOptions
 {
     /// <summary>Directory where raw MIME messages and attachments are written.</summary>
     public string RawPath { get; set; } = "./data/raw";
+}
+
+public sealed class BackupOptions
+{
+    /// <summary>Enable scheduled backups. On-demand backups via the API work regardless.</summary>
+    public bool Enabled { get; set; }
+
+    /// <summary>Directory where backup files are written.</summary>
+    public string Directory { get; set; } = "./data/backups";
+
+    /// <summary>Hours between scheduled backups.</summary>
+    public int IntervalHours { get; set; } = 24;
+
+    /// <summary>Number of most-recent backups to keep; older ones are pruned.</summary>
+    public int RetentionCount { get; set; } = 7;
 }
 
 public sealed class WorkerOptions

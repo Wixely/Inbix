@@ -22,6 +22,12 @@ services:
       Inbix__Database__ConnectionString: "Data Source=/data/inbix.db"
       Inbix__Storage__RawPath: "/data/raw"
 
+      # Scheduled database backups (online/consistent). Kept inside the data volume.
+      Inbix__Backups__Enabled: "true"
+      Inbix__Backups__Directory: "/data/backups"
+      Inbix__Backups__IntervalHours: "24"
+      Inbix__Backups__RetentionCount: "7"
+
       # Admin login. Set a password (or PasswordHash) — without one the UI/API are OPEN.
       # Generate a hash: docker compose run --rm inbix dotnet Inbix.Web.dll hash-password "your-password"
       Inbix__Admin__Username: "admin"
