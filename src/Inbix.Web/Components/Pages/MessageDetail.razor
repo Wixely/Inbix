@@ -41,18 +41,27 @@ else
     }
 
     <div class="panel">
-        <div class="tabs">
-            <button class="tab @(_showHtml ? "" : "active")" @onclick="() => _showHtml = false">Text</button>
-            @if (!string.IsNullOrEmpty(_body?.HtmlBody))
+        <div class="body-toolbar">
+            @if (HasHtml)
             {
-                <button class="tab @(_showHtml ? "active" : "")" @onclick="() => _showHtml = true">HTML</button>
+                @if (_showHtml)
+                {
+                    <button class="btn-ghost btn-sm" @onclick="() => _showHtml = false">← Show text</button>
+                    <span class="muted body-note">HTML view — remote images, scripts and fonts are blocked.</span>
+                }
+                else
+                {
+                    <button class="btn-ghost btn-sm" @onclick="() => _showHtml = true">Show HTML version</button>
+                    <span class="muted body-note">Plain text shown by default for safety.</span>
+                }
             }
         </div>
 
-        @if (_showHtml && !string.IsNullOrEmpty(_body?.HtmlBody))
+        @if (_showHtml && HasHtml)
         {
-            @* Render untrusted HTML inside a sandboxed iframe to prevent script execution / XSS. *@
-            <iframe class="html-view" sandbox="" srcdoc="@_body!.HtmlBody"></iframe>
+            @* Untrusted HTML: sandbox="" blocks scripts/forms; the injected CSP blocks remote
+               resource loads (tracking pixels, external CSS/JS/fonts). *@
+            <iframe class="html-view" sandbox="" srcdoc="@HtmlSrcDoc"></iframe>
         }
         else
         {
@@ -69,6 +78,16 @@ else
     private IReadOnlyList<Attachment>? _attachments;
     private bool _loaded;
     private bool _showHtml;
+
+    // Block remote content (tracking pixels / external CSS/JS/fonts); allow inline styles and
+    // embedded data: images, which legitimate HTML mail commonly uses.
+    private const string ContentSecurityPolicy =
+        "default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:; base-uri 'none'; form-action 'none'";
+
+    private bool HasHtml => !string.IsNullOrEmpty(_body?.HtmlBody);
+
+    private string HtmlSrcDoc =>
+        $"<meta http-equiv=\"Content-Security-Policy\" content=\"{ContentSecurityPolicy}\">{_body?.HtmlBody}";
 
     protected override async Task OnInitializedAsync()
     {
