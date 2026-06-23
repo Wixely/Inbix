@@ -20,6 +20,12 @@ RUN dotnet publish src/Inbix.Web/Inbix.Web.csproj -c Release -o /app --no-restor
 # ---- Runtime stage ----
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
+
+# curl is used by the container HEALTHCHECK below.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=build /app ./
 
 # Bind the web UI/API to 8080; SMTP port comes from configuration (defaults to 25).
@@ -33,5 +39,8 @@ VOLUME ["/data"]
 # 8080 = web UI/API, 25 = inbound SMTP.
 EXPOSE 8080
 EXPOSE 25
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD curl -fsS http://localhost:8080/health/ready || exit 1
 
 ENTRYPOINT ["dotnet", "Inbix.Web.dll"]

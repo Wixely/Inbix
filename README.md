@@ -121,6 +121,17 @@ GET    /api/audit
 
 OpenAPI document is served at `/openapi/v1.json` in Development.
 
+## Health checks
+
+Two unauthenticated endpoints for monitors / orchestrators:
+
+| Endpoint | Meaning |
+|---|---|
+| `GET /health` | Liveness — the process is up (runs no checks). |
+| `GET /health/ready` | Readiness — returns 503 unless the database is reachable. |
+
+The Docker image has a `HEALTHCHECK` that polls `/health/ready`.
+
 ## Backups & restore
 
 Set `Inbix:Backups:Enabled=true` for scheduled backups (default: daily, keep 7). Each backup is a

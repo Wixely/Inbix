@@ -4,9 +4,11 @@ using Inbix.Smtp;
 using Inbix.Web.Api;
 using Inbix.Web.Auth;
 using Inbix.Web.Components;
+using Inbix.Web.Health;
 using Inbix.Worker;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
 
 // CLI helper: generate a PBKDF2 hash for Inbix:Admin:PasswordHash, then exit.
@@ -73,6 +75,10 @@ if (requireHttps)
     });
 }
 
+// Health checks: liveness (process) and readiness (database reachable).
+builder.Services.AddHealthChecks()
+    .AddCheck<DatabaseHealthCheck>("database", tags: ["ready"]);
+
 // Web: API + Blazor UI.
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 builder.Services.AddOpenApi();
@@ -98,6 +104,10 @@ app.UseAuthentication();
 app.UseMiddleware<ApiKeyMiddleware>();
 app.UseAuthorization();
 app.UseAntiforgery();
+
+// Liveness: process is up (runs no checks). Readiness: database reachable.
+app.MapHealthChecks("/health", new HealthCheckOptions { Predicate = _ => false }).AllowAnonymous();
+app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains("ready") }).AllowAnonymous();
 
 app.MapInbixAuth();
 app.MapInbixApi();
