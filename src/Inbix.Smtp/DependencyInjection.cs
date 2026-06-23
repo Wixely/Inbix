@@ -11,6 +11,7 @@ public static class DependencyInjection
     /// </summary>
     public static IServiceCollection AddInbixSmtp(this IServiceCollection services)
     {
+        services.AddSingleton<SmtpConnectionGovernor>();
         services.AddSingleton<AliasMailboxFilter>();
         services.AddSingleton<InbixMessageStore>();
 

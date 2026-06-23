@@ -14,13 +14,16 @@ namespace Inbix.Smtp;
 public sealed class SmtpServerHostedService : BackgroundService
 {
     private readonly IServiceProvider _serviceProvider;
+    private readonly SmtpConnectionGovernor _governor;
     private readonly SmtpOptions _options;
     private readonly ILogger<SmtpServerHostedService> _logger;
 
     public SmtpServerHostedService(
-        IServiceProvider serviceProvider, IOptions<InbixOptions> options, ILogger<SmtpServerHostedService> logger)
+        IServiceProvider serviceProvider, SmtpConnectionGovernor governor,
+        IOptions<InbixOptions> options, ILogger<SmtpServerHostedService> logger)
     {
         _serviceProvider = serviceProvider;
+        _governor = governor;
         _options = options.Value.Smtp;
         _logger = logger;
     }
@@ -51,7 +54,14 @@ public sealed class SmtpServerHostedService : BackgroundService
 
         var server = new SmtpServer.SmtpServer(optionsBuilder.Build(), _serviceProvider);
 
-        _logger.LogInformation("Inbix SMTP receiver listening on port {Port} (max {MaxSize} bytes)", _options.Port, maxSize);
+        // Track active sessions for the connection governor (concurrency cap + per-IP rate limit).
+        server.SessionCreated += (_, _) => _governor.SessionStarted();
+        server.SessionCompleted += (_, _) => _governor.SessionEnded();
+        server.SessionFaulted += (_, _) => _governor.SessionEnded();
+        server.SessionCancelled += (_, _) => _governor.SessionEnded();
+
+        _logger.LogInformation("Inbix SMTP receiver listening on port {Port} (max {MaxSize} bytes, {MaxSessions} concurrent)",
+            _options.Port, maxSize, _options.MaxConcurrentSessions);
 
         try
         {

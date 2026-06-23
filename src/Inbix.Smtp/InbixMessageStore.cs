@@ -1,11 +1,9 @@
 using System.Buffers;
-using System.Net;
 using Inbix.Core.Abstractions;
 using Inbix.Core.Domain;
 using Microsoft.Extensions.Logging;
 using SmtpServer;
 using SmtpServer.Mail;
-using SmtpServer.Net;
 using SmtpServer.Protocol;
 using SmtpServer.Storage;
 
@@ -36,7 +34,7 @@ public sealed class InbixMessageStore : MessageStore
         ISessionContext context, IMessageTransaction transaction, ReadOnlySequence<byte> buffer, CancellationToken cancellationToken)
     {
         var receivedAt = DateTimeOffset.UtcNow;
-        var remoteIp = TryGetRemoteIp(context);
+        var remoteIp = SmtpSessionContext.GetRemoteIp(context);
         var sender = FormatMailbox(transaction.From);
         var raw = buffer.ToArray();
 
@@ -112,13 +110,6 @@ public sealed class InbixMessageStore : MessageStore
         {
             _logger.LogWarning(ex, "Failed to finalise SMTP session {SessionId}", sessionId);
         }
-    }
-
-    private static string? TryGetRemoteIp(ISessionContext context)
-    {
-        if (context.Properties.TryGetValue(EndpointListener.RemoteEndPointKey, out var value) && value is IPEndPoint ep)
-            return ep.Address.ToString();
-        return null;
     }
 
     private static string? FormatMailbox(IMailbox? mailbox)

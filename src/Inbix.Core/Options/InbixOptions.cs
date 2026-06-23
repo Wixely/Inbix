@@ -47,8 +47,11 @@ public sealed class SmtpOptions
     /// <summary>Maximum accepted message size in bytes. Larger messages are rejected with 552.</summary>
     public long MaxMessageSizeBytes { get; set; } = 26_214_400; // 25 MiB
 
-    /// <summary>Maximum number of concurrent SMTP sessions.</summary>
+    /// <summary>Maximum number of concurrent SMTP sessions. Excess sessions are rejected at MAIL FROM. 0 disables.</summary>
     public int MaxConcurrentSessions { get; set; } = 50;
+
+    /// <summary>Per-IP connection rate limit (connections per minute). Excess are rejected at MAIL FROM. 0 disables.</summary>
+    public int MaxConnectionsPerMinutePerIp { get; set; }
 
     /// <summary>Optional path to a PFX certificate to enable STARTTLS. Empty disables TLS.</summary>
     public string CertificatePath { get; set; } = string.Empty;

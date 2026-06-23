@@ -75,6 +75,8 @@ using the `__` separator (e.g. `Inbix__Smtp__Port=2525`).
 | `Inbix:Smtp:Port` | `25` | SMTP listen port |
 | `Inbix:Smtp:ServerName` | `inbix` | EHLO/banner name |
 | `Inbix:Smtp:MaxMessageSizeBytes` | `26214400` | Max accepted message size (else `552`) |
+| `Inbix:Smtp:MaxConcurrentSessions` | `50` | Concurrent-session cap (rejected at MAIL FROM); 0 disables |
+| `Inbix:Smtp:MaxConnectionsPerMinutePerIp` | `0` | Per-IP connection rate limit/min; 0 disables |
 | `Inbix:Smtp:CertificatePath` / `CertificatePassword` | _(empty)_ | PFX path to enable STARTTLS |
 | `Inbix:Storage:RawPath` | `./data/raw` | Directory for raw MIME + attachments |
 | `Inbix:Worker:PollSeconds` / `BatchSize` | `5` / `20` | Parser poll interval / batch size |

@@ -14,6 +14,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Inbix.Core\Inbix.Core.csproj" />
     <ProjectReference Include="..\..\src\Inbix.Data\Inbix.Data.csproj" />
+    <ProjectReference Include="..\..\src\Inbix.Smtp\Inbix.Smtp.csproj" />
     <ProjectReference Include="..\..\src\Inbix.Worker\Inbix.Worker.csproj" />
   </ItemGroup>
 </Project>
