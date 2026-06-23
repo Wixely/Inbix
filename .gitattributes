@@ -13,3 +13,5 @@
 *.ico binary
 *.pfx binary
 *.db binary
+*.woff binary
+*.woff2 binary

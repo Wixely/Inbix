@@ -8,6 +8,13 @@ public sealed class InbixOptions
     /// <summary>Domains this server accepts mail for. Recipients on any other domain are rejected.</summary>
     public string[] Domains { get; set; } = [];
 
+    /// <summary>
+    /// When true, the web host redirects HTTP→HTTPS, enables HSTS, honours forwarded proto
+    /// headers (for reverse proxies), and marks the auth cookie Secure. Leave false when TLS is
+    /// terminated upstream and Inbix is reached over plain HTTP on a private network.
+    /// </summary>
+    public bool RequireHttps { get; set; }
+
     public DatabaseOptions Database { get; set; } = new();
     public SmtpOptions Smtp { get; set; } = new();
     public StorageOptions Storage { get; set; } = new();
@@ -62,9 +69,27 @@ public sealed class WorkerOptions
     public int BatchSize { get; set; } = 20;
 }
 
-/// <summary>Admin UI / API protection. Minimal for MVP; expand during hardening.</summary>
+/// <summary>Admin UI / API authentication.</summary>
 public sealed class AdminOptions
 {
-    /// <summary>When set, the API requires this value in the "X-Api-Key" header. Empty disables the check.</summary>
+    /// <summary>Admin login username. Defaults to "admin" when left empty.</summary>
+    public string Username { get; set; } = "admin";
+
+    /// <summary>
+    /// Plaintext admin password. Convenient for local/dev via env var or user-secrets, but prefer
+    /// <see cref="PasswordHash"/> in production. Ignored when <see cref="PasswordHash"/> is set.
+    /// </summary>
+    public string Password { get; set; } = string.Empty;
+
+    /// <summary>
+    /// PBKDF2 password hash (format "pbkdf2-sha256$iterations$salt$key"). Generate with
+    /// <c>dotnet run --project src/Inbix.Web -- hash-password &lt;password&gt;</c>. Takes precedence over <see cref="Password"/>.
+    /// </summary>
+    public string PasswordHash { get; set; } = string.Empty;
+
+    /// <summary>
+    /// When set, the API also accepts this value in the "X-Api-Key" header (for programmatic access
+    /// without a login cookie). The browser UI always uses cookie authentication.
+    /// </summary>
     public string ApiKey { get; set; } = string.Empty;
 }

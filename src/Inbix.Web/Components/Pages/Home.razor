@@ -1,22 +1,121 @@
 @page "/"
 @inject IAliasRepository Aliases
 
-<h1>Dashboard</h1>
+<section class="hero">
+    <div class="hero-copy">
+        <span class="pill">Inbound-only mail server</span>
+        <h1 class="hero-title">Permanent aliases<span class="accent">_</span><br />that just <span class="accent">arrive.</span></h1>
+        <p class="lead">
+            Inbix receives real email for addresses like <code>spotify@yourdomain</code>,
+            accepts only the aliases you choose, stores every message, and never sends a thing.
+        </p>
+        <div class="btn-row">
+            <a class="btn btn-primary" href="aliases">Manage aliases ↗</a>
+            <a class="btn btn-ghost" href="audit">View audit log</a>
+        </div>
+    </div>
 
-<div class="cards">
-    <div class="card">
-        <div class="card-value">@(_aliases?.Count.ToString() ?? "…")</div>
-        <div class="card-label">Aliases</div>
+    <div class="hero-art">
+        <div class="art-card">
+            <div class="art-head">
+                <span class="tdot r"></span><span class="tdot a"></span><span class="tdot g"></span>
+                <span class="tlabel">SMTP · :25</span>
+            </div>
+            <pre class="art-body"><span class="in">&gt;</span> <span class="cmd">MAIL FROM:&lt;noreply@spotify.com&gt;</span>
+<span class="ok">250</span> 2.1.0 Sender OK
+<span class="in">&gt;</span> <span class="cmd">RCPT TO:&lt;spotify@yourdomain&gt;</span>
+<span class="ok">250</span> 2.1.5 Recipient OK
+<span class="in">&gt;</span> <span class="cmd">DATA</span>
+<span class="ok">354</span> Start mail input
+<span class="in">&gt;</span> <span class="cmd">.</span>
+<span class="ok">250</span> Stored — parsing async</pre>
+        </div>
     </div>
-    <div class="card">
-        <div class="card-value">@(_aliases?.Count(a => a.Enabled).ToString() ?? "…")</div>
-        <div class="card-label">Enabled</div>
+</section>
+
+<section class="stat-strip">
+    <div class="stat">
+        <div class="stat-ic violet">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18" /><path d="M7 14l3-3 3 3 5-6" /></svg>
+        </div>
+        <div>
+            <div class="stat-value">@(_aliases?.Count.ToString() ?? "…")</div>
+            <div class="stat-label">Aliases configured</div>
+        </div>
     </div>
+    <div class="stat">
+        <div class="stat-ic teal">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><path d="M22 4 12 14.01l-3-3" /></svg>
+        </div>
+        <div>
+            <div class="stat-value">@(_aliases?.Count(a => a.Enabled).ToString() ?? "…")</div>
+            <div class="stat-label">Enabled &amp; accepting</div>
+        </div>
+    </div>
+    <div class="stat">
+        <div class="stat-ic coral">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64A9 9 0 1 1 5.64 6.64" /><line x1="12" y1="2" x2="12" y2="12" /></svg>
+        </div>
+        <div>
+            <div class="stat-value">0</div>
+            <div class="stat-label">Messages ever sent</div>
+        </div>
+    </div>
+</section>
+
+<div class="section-head">
+    <span class="eyebrow">Capabilities <span class="dot"></span></span>
 </div>
 
-<p class="muted">Inbox-only alias mail server. Create permanent aliases, then point your domain's MX record here to receive mail.</p>
+<div class="feature-grid">
+    <article class="feature-card">
+        <div class="feature-top">
+            <div class="feature-icon violet">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" /></svg>
+            </div>
+            <span class="feature-num">01</span>
+        </div>
+        <h3>SMTP<br />Receiver</h3>
+        <p>Listens on port 25 and validates every recipient at RCPT&nbsp;TO — unknown aliases get a clean 550.</p>
+        <a class="feature-go violet" href="aliases">→</a>
+    </article>
 
-<p><a class="btn" href="aliases">Manage aliases →</a></p>
+    <article class="feature-card">
+        <div class="feature-top">
+            <div class="feature-icon coral">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4" /><path d="M16 12v1.5a2.5 2.5 0 0 0 5 0V12a9 9 0 1 0-3.5 7.1" /></svg>
+            </div>
+            <span class="feature-num">02</span>
+        </div>
+        <h3>Alias<br />Registry</h3>
+        <p>Permanent addresses you can enable or disable. Deleted aliases stay rejected by default.</p>
+        <a class="feature-go coral" href="aliases">→</a>
+    </article>
+
+    <article class="feature-card">
+        <div class="feature-top">
+            <div class="feature-icon amber">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2" /><polyline points="2 17 12 22 22 17" /><polyline points="2 12 12 17 22 12" /></svg>
+            </div>
+            <span class="feature-num">03</span>
+        </div>
+        <h3>MIME<br />Parsing</h3>
+        <p>Raw message stored instantly, then headers, body and attachments parsed asynchronously.</p>
+        <a class="feature-go amber" href="aliases">→</a>
+    </article>
+
+    <article class="feature-card">
+        <div class="feature-top">
+            <div class="feature-icon teal">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8M12 17v4" /></svg>
+            </div>
+            <span class="feature-num">04</span>
+        </div>
+        <h3>Read-only<br />Access</h3>
+        <p>Browse every message through this UI or the JSON API. Inbix only ever reads them back.</p>
+        <a class="feature-go teal" href="audit">→</a>
+    </article>
+</div>
 
 @code {
     private IReadOnlyList<Alias>? _aliases;

@@ -1,12 +1,13 @@
 using Inbix.Core.Options;
+using Inbix.Web.Auth;
 using Microsoft.Extensions.Options;
 
 namespace Inbix.Web.Api;
 
 /// <summary>
-/// Optional API-key gate for /api routes. When <see cref="AdminOptions.ApiKey"/> is configured,
-/// requests must present a matching "X-Api-Key" header. Empty config disables the check (local dev).
-/// This is a minimal MVP control; see the plan's hardening phase for proper admin auth.
+/// Guards /api requests. A request is allowed when it is either authenticated via the login cookie
+/// (the browser UI) or presents a matching "X-Api-Key" header (programmatic access). When no admin
+/// password and no API key are configured at all, the API is left open for local development.
 /// </summary>
 public sealed class ApiKeyMiddleware
 {
@@ -21,23 +22,39 @@ public sealed class ApiKeyMiddleware
         _apiKey = options.Value.Admin.ApiKey ?? string.Empty;
     }
 
-    public async Task InvokeAsync(HttpContext context)
+    public async Task InvokeAsync(HttpContext context, IAdminAuthenticator auth)
     {
-        if (_apiKey.Length == 0 || !context.Request.Path.StartsWithSegments("/api"))
+        if (!context.Request.Path.StartsWithSegments("/api"))
         {
             await _next(context);
             return;
         }
 
-        if (!context.Request.Headers.TryGetValue(HeaderName, out var provided) ||
-            !CryptographicEquals(provided.ToString(), _apiKey))
+        // Logged-in browser session.
+        if (context.User?.Identity?.IsAuthenticated == true)
         {
-            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-            await context.Response.WriteAsJsonAsync(new { error = "Invalid or missing API key." });
+            await _next(context);
             return;
         }
 
-        await _next(context);
+        // Programmatic access via API key.
+        if (_apiKey.Length > 0 &&
+            context.Request.Headers.TryGetValue(HeaderName, out var provided) &&
+            CryptographicEquals(provided.ToString(), _apiKey))
+        {
+            await _next(context);
+            return;
+        }
+
+        // Nothing configured -> open for local dev.
+        if (!auth.Enabled && _apiKey.Length == 0)
+        {
+            await _next(context);
+            return;
+        }
+
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        await context.Response.WriteAsJsonAsync(new { error = "Authentication required (login cookie or X-Api-Key)." });
     }
 
     private static bool CryptographicEquals(string a, string b)

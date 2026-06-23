@@ -78,7 +78,26 @@ using the `__` separator (e.g. `Inbix__Smtp__Port=2525`).
 | `Inbix:Smtp:CertificatePath` / `CertificatePassword` | _(empty)_ | PFX path to enable STARTTLS |
 | `Inbix:Storage:RawPath` | `./data/raw` | Directory for raw MIME + attachments |
 | `Inbix:Worker:PollSeconds` / `BatchSize` | `5` / `20` | Parser poll interval / batch size |
-| `Inbix:Admin:ApiKey` | _(empty)_ | If set, `/api` requires header `X-Api-Key` |
+| `Inbix:RequireHttps` | `false` | HTTP→HTTPS redirect, HSTS, forwarded-proto, Secure cookie |
+| `Inbix:Admin:Username` | `admin` | Admin login username |
+| `Inbix:Admin:Password` | _(empty)_ | Admin password (plaintext; prefer `PasswordHash`) |
+| `Inbix:Admin:PasswordHash` | _(empty)_ | PBKDF2 hash (preferred); see below |
+| `Inbix:Admin:ApiKey` | _(empty)_ | Optional key for `/api` via `X-Api-Key` header |
+
+## Authentication
+
+The admin UI is protected by cookie login; `/api` accepts **either** the login cookie **or** an
+`X-Api-Key` header. Authentication turns on as soon as a password is configured:
+
+- Set `Inbix:Admin:Password` (quick) or `Inbix:Admin:PasswordHash` (preferred).
+- Generate a hash: `dotnet run --project src/Inbix.Web -- hash-password "your-password"`,
+  then set the printed value as `Inbix:Admin:PasswordHash`.
+
+> ⚠️ If **no** password/hash is set, authentication is **disabled** and the UI/API are open — a
+> startup warning is logged. Always set a password before exposing Inbix.
+
+Put the UI behind HTTPS in production: set `Inbix:RequireHttps=true` (or terminate TLS at a reverse
+proxy and keep it on a private network / VPN).
 
 ## API
 
@@ -135,9 +154,16 @@ dotnet test
 
 ## Security notes
 
-- The admin UI is unauthenticated by default — keep it on a VPN / behind a reverse proxy, and set
-  `Inbix:Admin:ApiKey` for the API. Proper admin auth is a planned hardening item.
+- The admin UI uses cookie login and `/api` requires a cookie or `X-Api-Key` — but only once a
+  password is configured (see [Authentication](#authentication)). Set one before exposing Inbix, and
+  still prefer keeping it on a VPN / behind a reverse proxy.
 - HTML email bodies are rendered inside a `sandbox`ed `<iframe>` to prevent script execution.
 - This system can hold password-reset/account-recovery mail. Encrypt backups and restrict access.
 - **Known advisory:** `SQLitePCLRaw.lib.e_sqlite3` 2.1.11 (transitive via `Microsoft.Data.Sqlite`) is flagged by
   GHSA-2m69-gcr7-jv3q. It is the latest published bundle; bump it once an upstream fix ships.
+
+## License
+
+Inbix is released under the [MIT License](LICENSE). All third-party dependencies are permissive
+(MIT, Apache-2.0, public domain, or OFL fonts) and compatible with MIT distribution — see
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). There are no copyleft (GPL/LGPL/MPL) dependencies.

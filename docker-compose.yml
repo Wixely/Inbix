@@ -22,8 +22,17 @@ services:
       Inbix__Database__ConnectionString: "Data Source=/data/inbix.db"
       Inbix__Storage__RawPath: "/data/raw"
 
-      # Protect the API with a key (leave empty to disable). The UI should still be network-restricted.
+      # Admin login. Set a password (or PasswordHash) — without one the UI/API are OPEN.
+      # Generate a hash: docker compose run --rm inbix dotnet Inbix.Web.dll hash-password "your-password"
+      Inbix__Admin__Username: "admin"
+      Inbix__Admin__Password: "change-me"
+      # Inbix__Admin__PasswordHash: "pbkdf2-sha256$..."   # preferred over plaintext Password
+
+      # Optional API key for programmatic access (the browser UI uses the login cookie).
       Inbix__Admin__ApiKey: ""
+
+      # Set true when TLS terminates at a reverse proxy (honours X-Forwarded-Proto, Secure cookie).
+      Inbix__RequireHttps: "false"
 
       ASPNETCORE_ENVIRONMENT: "Production"
     volumes:

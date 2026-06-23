@@ -1,0 +1,31 @@
+@page "/login"
+@layout BlankLayout
+@attribute [AllowAnonymous]
+
+<div class="auth-wrap">
+    <form class="auth-card" method="post" action="auth/login">
+        <div class="auth-brand">
+            <span class="brand-mark">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v14H4z" /><path d="M4 7l8 6 8-6" /></svg>
+            </span>
+            <span class="brand-name">Inbix</span>
+        </div>
+        <h1 class="auth-title">Sign in</h1>
+        <p class="muted auth-sub">Admin access to your inbound mail.</p>
+
+        @if (Error is not null)
+        {
+            <p class="error auth-error">Invalid username or password.</p>
+        }
+
+        <input class="input auth-input" name="username" placeholder="Username" autocomplete="username" autofocus />
+        <input class="input auth-input" type="password" name="password" placeholder="Password" autocomplete="current-password" />
+        <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+        <button class="btn btn-primary auth-submit" type="submit">Sign in →</button>
+    </form>
+</div>
+
+@code {
+    [SupplyParameterFromQuery] public string? Error { get; set; }
+    [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
+}

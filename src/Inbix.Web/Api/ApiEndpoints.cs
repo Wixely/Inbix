@@ -10,7 +10,8 @@ public static class ApiEndpoints
 {
     public static IEndpointRouteBuilder MapInbixApi(this IEndpointRouteBuilder app)
     {
-        var api = app.MapGroup("/api").WithTags("Inbix");
+        // Exempt from the cookie fallback policy; ApiKeyMiddleware enforces cookie-or-key instead.
+        var api = app.MapGroup("/api").WithTags("Inbix").AllowAnonymous();
 
         // --- Aliases ---
         api.MapGet("/aliases", async (IAliasRepository repo, CancellationToken ct) =>

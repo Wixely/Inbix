@@ -2,8 +2,30 @@
 
 <div class="layout">
     <aside class="sidebar">
-        <div class="brand">📥 Inbix</div>
+        <div class="brand">
+            <span class="brand-mark">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 5h16v14H4z" />
+                    <path d="M4 7l8 6 8-6" />
+                </svg>
+            </span>
+            <span class="brand-name">Inbix</span>
+        </div>
         <NavMenu />
+        <div class="sidebar-foot">
+            <AuthorizeView>
+                <Authorized>
+                    <div class="signed-in">
+                        <span class="muted">Signed in as</span> <strong>@context.User.Identity?.Name</strong>
+                        <form method="post" action="auth/logout" class="logout-form">
+                            <button type="submit" class="btn-link">Sign out</button>
+                        </form>
+                    </div>
+                </Authorized>
+            </AuthorizeView>
+            <span class="dot-status">●</span> Inbound only — never sends.<br />
+            v1 · SQLite
+        </div>
     </aside>
     <main class="content">
         @Body
