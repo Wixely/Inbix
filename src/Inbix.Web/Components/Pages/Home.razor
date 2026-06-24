@@ -6,7 +6,7 @@
 
 <div class="page-head"><h1>Recent mail</h1></div>
 <p class="muted page-note">
-    The 5 latest messages across all mailboxes.
+    The 10 latest messages across all mailboxes.
     @if (_userInteracted)
     {
         <span>Auto-refresh paused while you read.</span>
@@ -104,7 +104,7 @@
 
     private async Task RefreshAsync()
     {
-        _recent = await Messages.ListRecentAsync(5);
+        _recent = await Messages.ListRecentAsync(10);
         if (!_userInteracted)
             _selectedId = _recent.FirstOrDefault()?.Id; // newest open by default
         await LoadSelectedAsync();
