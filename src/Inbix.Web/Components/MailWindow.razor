@@ -1,0 +1,22 @@
+@* The art-card "window": traffic-light header + two-pane split (list | reading pane). *@
+<div class="art-card dash">
+    <div class="art-head">
+        <span class="tdot r"></span><span class="tdot a"></span><span class="tdot g"></span>
+        @Title
+    </div>
+    <div class="dash-split">
+        <div class="dash-list">@List</div>
+        <div class="dash-pane">@Preview</div>
+    </div>
+</div>
+
+@code {
+    /// <summary>Header label / link (right side of the title bar).</summary>
+    [Parameter] public RenderFragment? Title { get; set; }
+
+    /// <summary>Left column: the card list.</summary>
+    [Parameter] public RenderFragment? List { get; set; }
+
+    /// <summary>Right column: the reading pane.</summary>
+    [Parameter] public RenderFragment? Preview { get; set; }
+}

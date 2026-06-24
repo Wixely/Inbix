@@ -418,6 +418,33 @@ select.input { cursor: pointer; }
 .dash-open { flex-shrink: 0; }
 .dash-pane-scroll { flex: 1; overflow-y: auto; padding: 0.6rem 2.1rem 1.6rem; }
 .dash-text { margin-top: 1rem; max-height: none; overflow: visible; }
+/* Inbox reading pane: full MessageView inside the art-card window */
+.msg-scroll { flex: 1; overflow-y: auto; padding: 1.6rem 2.1rem; }
+
+/* Slim, themed scrollbars for the mail panes */
+.dash-list, .dash-pane-scroll, .msg-scroll, .text-view {
+    scrollbar-width: thin;                              /* Firefox */
+    scrollbar-color: var(--border-hi) transparent;
+}
+.dash-list::-webkit-scrollbar,
+.dash-pane-scroll::-webkit-scrollbar,
+.msg-scroll::-webkit-scrollbar,
+.text-view::-webkit-scrollbar { width: 10px; height: 10px; }
+.dash-list::-webkit-scrollbar-track,
+.dash-pane-scroll::-webkit-scrollbar-track,
+.msg-scroll::-webkit-scrollbar-track,
+.text-view::-webkit-scrollbar-track { background: transparent; }
+.dash-list::-webkit-scrollbar-thumb,
+.dash-pane-scroll::-webkit-scrollbar-thumb,
+.msg-scroll::-webkit-scrollbar-thumb,
+.text-view::-webkit-scrollbar-thumb {
+    background: var(--border-hi); border-radius: 999px;
+    border: 2px solid transparent; background-clip: padding-box; /* inset, slimmer thumb */
+}
+.dash-list::-webkit-scrollbar-thumb:hover,
+.dash-pane-scroll::-webkit-scrollbar-thumb:hover,
+.msg-scroll::-webkit-scrollbar-thumb:hover,
+.text-view::-webkit-scrollbar-thumb:hover { background: var(--violet); background-clip: padding-box; }
 
 /* Panel title doubles as a link to the mailbox */
 .tlabel-link {
@@ -435,7 +462,7 @@ select.input { cursor: pointer; }
     .dash { height: auto; }
     .dash-split { flex-direction: column; }
     .dash-list { width: auto; max-height: 280px; border-right: none; border-bottom: 1px solid var(--border); }
-    .dash-pane-scroll { overflow: visible; }
+    .dash-pane-scroll, .msg-scroll { overflow: visible; }
 }
 
 /* ---------- Auth ---------- */

@@ -23,7 +23,7 @@ storage, aliases, TLS, the SMTP listener, and DNS (public IP, MX records, MX→I
 
 @if (_lastRun is not null)
 {
-    <p class="muted last-run">Last run @_lastRun.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") (@Ago(_lastRun.Value))</p>
+    <p class="muted last-run">Last run @_lastRun.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") (@TimeFormat.Ago(_lastRun.Value))</p>
 }
 else
 {
@@ -87,15 +87,6 @@ else
         {
             _running = false;
         }
-    }
-
-    private static string Ago(DateTimeOffset when)
-    {
-        var elapsed = DateTimeOffset.UtcNow - when;
-        return elapsed.TotalSeconds < 60 ? "just now"
-            : elapsed.TotalMinutes < 60 ? $"{(int)elapsed.TotalMinutes} min ago"
-            : elapsed.TotalHours < 24 ? $"{(int)elapsed.TotalHours} h ago"
-            : $"{(int)elapsed.TotalDays} d ago";
     }
 
     private static string CssFor(DiagnosticStatus s) => s switch

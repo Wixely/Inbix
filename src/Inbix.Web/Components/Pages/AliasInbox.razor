@@ -9,13 +9,12 @@
 }
 else
 {
-    <div class="page-head">
-        <h1>@Title</h1>
-    </div>
+    <div class="page-head"><h1>@Title</h1></div>
     <p class="muted page-note"><a href="aliases">← Aliases</a></p>
 
-    <div class="mailbox">
-        <div class="mail-list">
+    <MailWindow>
+        <Title><span class="tlabel">@Title</span></Title>
+        <List>
             @if (_items is null)
             {
                 <p class="muted pad">Loading…</p>
@@ -28,41 +27,25 @@ else
             {
                 @foreach (var m in _items)
                 {
-                    <button type="button" class="mail-card @(m.Id == _selectedId ? "active" : "")" @onclick="() => _selectedId = m.Id">
-                        <div class="mail-card-row">
-                            <span class="mail-from">@(string.IsNullOrWhiteSpace(m.Sender) ? "(unknown sender)" : m.Sender)</span>
-                            <span class="mail-time">@FormatTime(m.ReceivedAt)</span>
-                        </div>
-                        <div class="mail-subject">
-                            @(string.IsNullOrWhiteSpace(m.Subject) ? "(no subject)" : m.Subject)
-                            @if (!m.Parsed)
-                            {
-                                <span class="badge off">unparsed</span>
-                            }
-                        </div>
-                        <div class="mail-snippet">
-                            @if (_alias.IsCatchAll)
-                            {
-                                <span class="mail-to">@m.Recipient</span>
-                            }
-                            @Clean(m.Snippet)
-                        </div>
-                    </button>
+                    <MailCard Sender="@m.Sender" Subject="@m.Subject" ReceivedAt="@m.ReceivedAt" Parsed="@m.Parsed"
+                              Chip="@(_alias.IsCatchAll ? m.Recipient : null)" Active="@(m.Id == _selectedId)"
+                              OnClick="@(() => _selectedId = m.Id)" />
                 }
             }
-        </div>
-
-        <div class="mail-preview">
+        </List>
+        <Preview>
             @if (_selectedId is null)
             {
                 <div class="preview-empty muted">Select a message to read it.</div>
             }
             else
             {
-                <MessageView MessageId="@_selectedId.Value" />
+                <div class="msg-scroll">
+                    <MessageView MessageId="@_selectedId.Value" />
+                </div>
             }
-        </div>
-    </div>
+        </Preview>
+    </MailWindow>
 }
 
 @code {
@@ -99,13 +82,4 @@ else
                 _selectedId ??= _items[0].Id;
         }
     }
-
-    private static string FormatTime(DateTimeOffset t)
-    {
-        var local = t.ToLocalTime();
-        return local.Date == DateTimeOffset.Now.Date ? local.ToString("HH:mm") : local.ToString("MMM d");
-    }
-
-    private static string Clean(string? snippet) =>
-        string.IsNullOrWhiteSpace(snippet) ? "" : System.Text.RegularExpressions.Regex.Replace(snippet, "\\s+", " ").Trim();
 }

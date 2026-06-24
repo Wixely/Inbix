@@ -1,0 +1,31 @@
+@* A single message card for the dashboard / inbox lists. *@
+<button type="button" class="mail-card @(Active ? "active" : "")" @onclick="OnClick">
+    <div class="mail-card-row">
+        <span class="mail-from">@(string.IsNullOrWhiteSpace(Sender) ? "(unknown sender)" : Sender)</span>
+        @if (!string.IsNullOrEmpty(Chip))
+        {
+            <span class="chip">@Chip</span>
+        }
+    </div>
+    <div class="mail-subject">
+        @(string.IsNullOrWhiteSpace(Subject) ? "(no subject)" : Subject)
+        @if (!Parsed)
+        {
+            <span class="badge off">unparsed</span>
+        }
+    </div>
+    <div class="mail-when">@TimeFormat.Timestamp(ReceivedAt) <span class="when-sep">&middot;</span> @TimeFormat.Ago(ReceivedAt)</div>
+</button>
+
+@code {
+    [Parameter] public string? Sender { get; set; }
+    [Parameter] public string? Subject { get; set; }
+    [Parameter] public DateTimeOffset ReceivedAt { get; set; }
+    [Parameter] public bool Parsed { get; set; } = true;
+
+    /// <summary>Optional pill (mailbox label on the dashboard; recipient for a catch-all inbox).</summary>
+    [Parameter] public string? Chip { get; set; }
+
+    [Parameter] public bool Active { get; set; }
+    [Parameter] public EventCallback OnClick { get; set; }
+}

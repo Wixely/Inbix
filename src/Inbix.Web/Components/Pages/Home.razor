@@ -17,9 +17,8 @@
     }
 </p>
 
-<div class="art-card dash">
-    <div class="art-head">
-        <span class="tdot r"></span><span class="tdot a"></span><span class="tdot g"></span>
+<MailWindow>
+    <Title>
         @if (_selected is not null)
         {
             <button class="tlabel-link" @onclick="OpenInMailbox" title="Open @_selected.MailboxLabel inbox">@_selected.MailboxLabel ↗</button>
@@ -28,66 +27,50 @@
         {
             <span class="tlabel">INBIX</span>
         }
-    </div>
+    </Title>
+    <List>
+        @if (_recent is null)
+        {
+            <p class="muted pad">Loading…</p>
+        }
+        else if (_recent.Count == 0)
+        {
+            <p class="muted pad">No mail received yet.</p>
+        }
+        else
+        {
+            @foreach (var m in _recent)
+            {
+                <MailCard Sender="@m.Sender" Subject="@m.Subject" ReceivedAt="@m.ReceivedAt" Parsed="@m.Parsed"
+                          Chip="@m.MailboxLabel" Active="@(m.Id == _selectedId)" OnClick="@(() => SelectManual(m.Id))" />
+            }
+        }
+    </List>
+    <Preview>
+        @if (_selected is null)
+        {
+            <div class="preview-empty muted">@(_recent is { Count: > 0 } ? "Select a message." : "Waiting for mail…")</div>
+        }
+        else
+        {
+            <div class="dash-pane-head">
+                <h2 class="msg-subject">@(string.IsNullOrWhiteSpace(_selected.Subject) ? "(no subject)" : _selected.Subject)</h2>
+                <button class="btn btn-primary dash-open" @onclick="OpenInMailbox" title="Open in @_selected.MailboxLabel">
+                    Open
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6" /><path d="M10 14 21 3" /><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /></svg>
+                </button>
+            </div>
+            <div class="dash-pane-scroll">
+                <div class="kv"><span>From</span><span>@(_selected.Sender ?? "—")</span></div>
+                <div class="kv"><span>To</span><span>@_selected.Recipient</span></div>
+                <div class="kv"><span>Mailbox</span><span>@_selected.MailboxLabel</span></div>
+                <div class="kv"><span>Received</span><span>@_selected.ReceivedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</span></div>
 
-    <div class="dash-split">
-        <div class="dash-list">
-            @if (_recent is null)
-            {
-                <p class="muted pad">Loading…</p>
-            }
-            else if (_recent.Count == 0)
-            {
-                <p class="muted pad">No mail received yet.</p>
-            }
-            else
-            {
-                @foreach (var m in _recent)
-                {
-                    <button type="button" class="mail-card @(m.Id == _selectedId ? "active" : "")" @onclick="() => SelectManual(m.Id)">
-                        <div class="mail-card-row">
-                            <span class="mail-from">@(string.IsNullOrWhiteSpace(m.Sender) ? "(unknown sender)" : m.Sender)</span>
-                            <span class="chip">@m.MailboxLabel</span>
-                        </div>
-                        <div class="mail-subject">
-                            @(string.IsNullOrWhiteSpace(m.Subject) ? "(no subject)" : m.Subject)
-                            @if (!m.Parsed)
-                            {
-                                <span class="badge off">unparsed</span>
-                            }
-                        </div>
-                        <div class="mail-when">@FmtDateTime(m.ReceivedAt) <span class="when-sep">&middot;</span> @Ago(m.ReceivedAt)</div>
-                    </button>
-                }
-            }
-        </div>
-
-        <div class="dash-pane">
-            @if (_selected is null)
-            {
-                <div class="preview-empty muted">@(_recent is { Count: > 0 } ? "Select a message." : "Waiting for mail…")</div>
-            }
-            else
-            {
-                <div class="dash-pane-head">
-                    <h2 class="msg-subject">@(string.IsNullOrWhiteSpace(_selected.Subject) ? "(no subject)" : _selected.Subject)</h2>
-                    <button class="btn btn-primary dash-open" @onclick="OpenInMailbox" title="Open in @_selected.MailboxLabel">
-                        Open
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6" /><path d="M10 14 21 3" /><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /></svg>
-                    </button>
-                </div>
-                <div class="dash-pane-scroll">
-                    <div class="kv"><span>From</span><span>@(_selected.Sender ?? "—")</span></div>
-                    <div class="kv"><span>To</span><span>@_selected.Recipient</span></div>
-                    <div class="kv"><span>Mailbox</span><span>@_selected.MailboxLabel</span></div>
-                    <div class="kv"><span>Received</span><span>@_selected.ReceivedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</span></div>
-
-                    <pre class="text-view dash-text">@(_selectedText ?? (_selected.Parsed ? "(no text body)" : "(parsing…)"))</pre>
-                </div>
-            }
-        </div>
-    </div>
-</div>
+                <pre class="text-view dash-text">@(_selectedText ?? (_selected.Parsed ? "(no text body)" : "(parsing…)"))</pre>
+            </div>
+        }
+    </Preview>
+</MailWindow>
 
 @code {
     private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(20);
@@ -146,17 +129,6 @@
     {
         if (_selected is not null)
             Nav.NavigateTo($"aliases/{_selected.AliasId}/inbox?m={_selected.Id}");
-    }
-
-    private static string FmtDateTime(DateTimeOffset t) => t.ToLocalTime().ToString("MMM d, yyyy HH:mm");
-
-    private static string Ago(DateTimeOffset when)
-    {
-        var d = DateTimeOffset.UtcNow - when;
-        if (d.TotalSeconds < 60) return "just now";
-        if (d.TotalMinutes < 60) return $"{(int)d.TotalMinutes} min ago";
-        if (d.TotalHours < 24) return $"{(int)d.TotalHours} h ago";
-        return $"{(int)d.TotalDays} d ago";
     }
 
     public void Dispose() => _timer?.Dispose();
