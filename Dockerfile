@@ -30,10 +30,18 @@ COPY --from=build /app ./
 
 # Bind the web UI/API to 8080; SMTP port comes from configuration (defaults to 25).
 ENV ASPNETCORE_URLS=http://+:8080
+
+# All persistent state lives under /data so a single mount captures everything:
+#   /data/inbix.db          SQLite database (+ -wal/-shm)
+#   /data/raw               raw MIME messages and attachments
+#   /data/backups           database backups (when enabled)
+#   /data/keys              DataProtection keys (sign the auth cookie)
 ENV Inbix__Database__ConnectionString="Data Source=/data/inbix.db"
 ENV Inbix__Storage__RawPath="/data/raw"
+ENV Inbix__Backups__Directory="/data/backups"
+ENV Inbix__DataProtectionKeysPath="/data/keys"
 
-# Persisted state (SQLite db + raw MIME/attachments).
+# Single persistence mount point.
 VOLUME ["/data"]
 
 # 8080 = web UI/API, 25 = inbound SMTP.

@@ -8,6 +8,7 @@ using Inbix.Web.Health;
 using Inbix.Worker;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
@@ -43,6 +44,17 @@ var authEnabled = !string.IsNullOrEmpty(adminConfig.Password) || !string.IsNullO
 var requireHttps = builder.Configuration.GetValue<bool>("Inbix:RequireHttps");
 
 builder.Services.AddSingleton<IAdminAuthenticator, AdminAuthenticator>();
+
+// Persist DataProtection keys (which sign the auth cookie) under the data volume so logins survive
+// container restarts/recreation. Defaults to the framework location when the path is not set.
+var keysPath = builder.Configuration["Inbix:DataProtectionKeysPath"];
+if (!string.IsNullOrWhiteSpace(keysPath))
+{
+    Directory.CreateDirectory(keysPath);
+    builder.Services.AddDataProtection()
+        .PersistKeysToFileSystem(new DirectoryInfo(keysPath))
+        .SetApplicationName("Inbix");
+}
 
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>

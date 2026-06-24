@@ -79,6 +79,7 @@ using the `__` separator (e.g. `Inbix__Smtp__Port=2525`).
 | `Inbix:Smtp:MaxConnectionsPerMinutePerIp` | `0` | Per-IP connection rate limit/min; 0 disables |
 | `Inbix:Smtp:CertificatePath` / `CertificatePassword` | _(empty)_ | PFX path to enable STARTTLS |
 | `Inbix:Storage:RawPath` | `./data/raw` | Directory for raw MIME + attachments |
+| `Inbix:DataProtectionKeysPath` | _(empty)_ | Where to persist DataProtection keys (cookie signing); set to keep logins across restarts |
 | `Inbix:Worker:PollSeconds` / `BatchSize` | `5` / `20` | Parser poll interval / batch size |
 | `Inbix:Backups:Enabled` | `false` | Enable scheduled database backups |
 | `Inbix:Backups:Directory` | `./data/backups` | Where backup files are written |
@@ -178,8 +179,31 @@ cp ./data/backups/inbix-YYYYMMDD-HHMMSS-<id>.db ./data/inbix.db   # remove inbix
 docker compose up -d --build
 ```
 
-See [`docker-compose.yml`](docker-compose.yml) for the sample configuration. State is persisted in the
-`inbix-data` volume (`/data`). The CI workflow publishes images to GHCR on pushes to `main` and version tags.
+See [`docker-compose.yml`](docker-compose.yml) for the sample configuration.
+
+**All persistent state lives under a single `/data` mount** — so one volume is the entire backup unit:
+
+| Path | Contents |
+|---|---|
+| `/data/inbix.db` (+ `-wal`/`-shm`) | SQLite database |
+| `/data/raw` | raw MIME messages and attachments |
+| `/data/backups` | database backups (when enabled) |
+| `/data/keys` | DataProtection keys (so logins survive container recreation) |
+
+The image sets these paths by default, so `docker run -v inbix-data:/data …` is enough.
+
+### Releasing an image
+
+`ci.yml` builds and tests on every push to `main` / PR. The Docker image is built and pushed to GHCR
+only when you create a **version tag**:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+This publishes `ghcr.io/<owner>/<repo>` tagged `1.0.0`, `1.0`, `1`, `latest`, and the commit SHA.
+You can also trigger it manually from the Actions tab (workflow_dispatch).
 
 ## Windows Service
 
