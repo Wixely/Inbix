@@ -1,0 +1,48 @@
+@using Inbix.Web.Diagnostics
+@inject DiagnosticsService Diagnostics
+@implements IDisposable
+
+<div class="foot-meta">
+    <a href="status" class="foot-status @StatusCss" title="@StatusTitle">
+        <span class="dot-status">&#9679;</span> @StatusLabel
+    </a>
+    <span class="foot-version">Inbix v@(Version)</span>
+</div>
+
+@code {
+    private static readonly string Version = BuildVersion();
+
+    protected override void OnInitialized() => Diagnostics.ResultsUpdated += OnUpdated;
+
+    private void OnUpdated() => _ = InvokeAsync(StateHasChanged);
+
+    private DiagnosticStatus? Status => Diagnostics.OverallStatus;
+
+    private string StatusLabel => Status switch
+    {
+        DiagnosticStatus.Ok => "Healthy",
+        DiagnosticStatus.Warning => "Warnings",
+        DiagnosticStatus.Error => "Issues",
+        _ => "Checking"
+    };
+
+    private string StatusCss => Status switch
+    {
+        DiagnosticStatus.Ok => "foot-status-ok",
+        DiagnosticStatus.Warning => "foot-status-warn",
+        DiagnosticStatus.Error => "foot-status-err",
+        _ => "foot-status-idle"
+    };
+
+    private string StatusTitle => Diagnostics.LastRunAtUtc is { } t
+        ? $"Last checked {t.ToLocalTime():yyyy-MM-dd HH:mm} - open Status"
+        : "Diagnostics not run yet - open Status";
+
+    private static string BuildVersion()
+    {
+        var v = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version;
+        return v is null ? "1.0.0" : $"{v.Major}.{v.Minor}.{v.Build}";
+    }
+
+    public void Dispose() => Diagnostics.ResultsUpdated -= OnUpdated;
+}

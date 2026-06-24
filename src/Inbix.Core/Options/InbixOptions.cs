@@ -103,6 +103,12 @@ public sealed class DiagnosticsOptions
     /// the MX target. Set empty to skip the outbound public-IP lookup.
     /// </summary>
     public string PublicIpLookupUrl { get; set; } = "https://checkip.amazonaws.com";
+
+    /// <summary>
+    /// How often the background diagnostics run repeats. The first run happens a few seconds after
+    /// startup; subsequent runs every this many hours. Set to 0 or less to run only once at startup.
+    /// </summary>
+    public int IntervalHours { get; set; } = 6;
 }
 
 /// <summary>Admin UI / API authentication.</summary>

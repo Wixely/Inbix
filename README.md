@@ -87,6 +87,7 @@ using the `__` separator (e.g. `Inbix__Smtp__Port=2525`).
 | `Inbix:RequireHttps` | `false` | HTTP→HTTPS redirect, HSTS, forwarded-proto, Secure cookie |
 | `Inbix:SeedSampleData` | `false` | On an empty DB, seed demo mailboxes + messages (and enable catch-all). On by default in Development |
 | `Inbix:Diagnostics:PublicIpLookupUrl` | `https://checkip.amazonaws.com` | Public-IP probe for the status page; empty to disable |
+| `Inbix:Diagnostics:IntervalHours` | `6` | Background diagnostics cadence (runs ~5s after startup, then every N hours); 0 = startup only |
 | `Inbix:Admin:Username` | `admin` | Admin login username |
 | `Inbix:Admin:Password` | _(empty)_ | Admin password (plaintext; prefer `PasswordHash`) |
 | `Inbix:Admin:PasswordHash` | _(empty)_ | PBKDF2 hash (preferred); see below |
@@ -140,8 +141,10 @@ The Docker image has a `HEALTHCHECK` that polls `/health/ready`.
 
 ## Status / diagnostics page
 
-The **Status** page (`/status`) runs on-demand configuration diagnostics to catch common
-inbound-mail misconfigurations:
+The **Status** page (`/status`) runs configuration diagnostics to catch common inbound-mail
+misconfigurations. They run automatically a few seconds after startup and then every
+`Inbix:Diagnostics:IntervalHours` (default 6), and can be re-run on demand from the page. The
+sidebar footer shows a live rollup (Healthy / Warnings / Issues) linking here. Checks:
 
 - Database reachable + migrations applied; raw storage writable; backups present/fresh.
 - Domains configured; at least one enabled alias.

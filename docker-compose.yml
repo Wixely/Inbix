@@ -38,6 +38,9 @@ services:
       # Set true when TLS terminates at a reverse proxy (honours X-Forwarded-Proto, Secure cookie).
       Inbix__RequireHttps: "false"
 
+      # Background diagnostics run a few seconds after startup, then every N hours (0 = startup only).
+      Inbix__Diagnostics__IntervalHours: "6"
+
       ASPNETCORE_ENVIRONMENT: "Production"
     volumes:
       # Single mount point holding ALL state: db, raw mail, backups, and keys.

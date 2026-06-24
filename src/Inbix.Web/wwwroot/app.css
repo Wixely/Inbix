@@ -124,6 +124,17 @@ code, pre { font-family: var(--font-mono); }
 .sidebar-foot { margin-top: auto; font-size: 0.72rem; color: var(--faint); line-height: 1.5; }
 .sidebar-foot .dot-status { color: var(--teal); }
 
+/* Footer status + version line */
+.foot-meta { display: flex; flex-direction: column; gap: 0.15rem; }
+.foot-status { display: inline-flex; align-items: center; gap: 0.4rem; width: fit-content; text-decoration: none; color: var(--text); }
+.foot-status:hover { text-decoration: underline; }
+.foot-status .dot-status { font-size: 0.7em; }
+.foot-status-ok .dot-status { color: var(--teal); }
+.foot-status-warn .dot-status { color: var(--amber); }
+.foot-status-err .dot-status { color: var(--coral); }
+.foot-status-idle .dot-status { color: var(--faint); }
+.foot-version { color: var(--faint); }
+
 .content { flex: 1; min-width: 0; padding: 2.5rem 3rem; max-width: 1140px; }
 
 @media (max-width: 820px) {

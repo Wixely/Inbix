@@ -107,6 +107,7 @@ builder.Services.AddHealthChecks()
 builder.Services.AddHttpClient();
 builder.Services.AddSingleton<DnsClient.ILookupClient>(_ => new DnsClient.LookupClient());
 builder.Services.AddSingleton<Inbix.Web.Diagnostics.DiagnosticsService>();
+builder.Services.AddHostedService<Inbix.Web.Diagnostics.DiagnosticsHostedService>();
 
 // Serialize enums as strings in API responses (e.g. diagnostic status "Ok"/"Warning").
 builder.Services.ConfigureHttpJsonOptions(o =>

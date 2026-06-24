@@ -45,6 +45,19 @@ public sealed class DiagnosticsService
     /// <summary>When the most recent run completed (UTC), or null if never run since startup.</summary>
     public DateTimeOffset? LastRunAtUtc { get; private set; }
 
+    /// <summary>
+    /// Worst status across the most recent run (Error &gt; Warning &gt; Ok), or null if never run.
+    /// Info results don't affect the overall rollup.
+    /// </summary>
+    public DiagnosticStatus? OverallStatus =>
+        LastResults is null ? null
+        : LastResults.Any(r => r.Status == DiagnosticStatus.Error) ? DiagnosticStatus.Error
+        : LastResults.Any(r => r.Status == DiagnosticStatus.Warning) ? DiagnosticStatus.Warning
+        : DiagnosticStatus.Ok;
+
+    /// <summary>Raised when a run completes, so live indicators (e.g. the sidebar) can refresh.</summary>
+    public event Action? ResultsUpdated;
+
     public async Task<IReadOnlyList<DiagnosticResult>> RunAllAsync(CancellationToken ct = default)
     {
         var results = new List<DiagnosticResult>();
@@ -61,6 +74,7 @@ public sealed class DiagnosticsService
 
         LastResults = results;
         LastRunAtUtc = DateTimeOffset.UtcNow;
+        ResultsUpdated?.Invoke();
         return results;
     }
 

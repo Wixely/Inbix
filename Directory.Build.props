@@ -7,5 +7,7 @@
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <InvariantGlobalization>true</InvariantGlobalization>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!-- Product version shown in the UI footer; CI may override with -p:Version=<tag> on release. -->
+    <Version>1.0.0</Version>
   </PropertyGroup>
 </Project>
