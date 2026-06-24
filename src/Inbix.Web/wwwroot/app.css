@@ -166,6 +166,7 @@ code, pre { font-family: var(--font-mono); }
 .btn-ghost { background: transparent; color: var(--text); border-color: var(--border-hi); }
 .btn-ghost:hover { background: var(--panel-2); border-color: var(--text); color: var(--text); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.btn svg { width: 1em; height: 1em; flex-shrink: 0; }
 
 .btn-link { background: none; border: none; color: var(--violet); cursor: pointer; padding: 0; font: inherit; }
 .btn-link:hover { color: #a99bff; }
@@ -394,10 +395,47 @@ select.input { cursor: pointer; }
 .msg-bodywrap { margin-top: 1rem; }
 .msg-standalone { margin-top: 0.5rem; }
 
+.chip {
+    display: inline-block; font-size: 0.7rem; font-family: var(--font-mono);
+    color: var(--violet); background: var(--violet-soft);
+    border: 1px solid rgba(139, 124, 246, 0.3); border-radius: 999px; padding: 0.05rem 0.5rem; flex-shrink: 0;
+}
+.mail-when { margin-top: 0.3rem; color: var(--muted); font-size: 0.76rem; font-family: var(--font-mono); }
+.when-sep { opacity: 0.45; }
+
+/* Dashboard: card list + preview live inside one art-card "window" */
+/* Let the dashboard use the full content width instead of the 1140px page cap. */
+.content:has(.dash) { max-width: none; }
+.dash { display: flex; flex-direction: column; height: calc(100vh - 200px); min-height: 460px; }
+.dash > .art-head { flex-shrink: 0; padding: 0.85rem 1.3rem; }
+.dash-split { flex: 1; display: flex; min-height: 0; }
+.dash-list { width: 380px; flex-shrink: 0; overflow-y: auto; border-right: 1px solid var(--border); }
+.dash-list .mail-card:last-child { border-bottom: none; }
+.dash-pane { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.dash-pane .preview-empty { flex: 1; }
+.dash-pane-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 1.6rem 2.1rem 0.6rem; }
+.dash-pane-head .msg-subject { margin: 0; }
+.dash-open { flex-shrink: 0; }
+.dash-pane-scroll { flex: 1; overflow-y: auto; padding: 0.6rem 2.1rem 1.6rem; }
+.dash-text { margin-top: 1rem; max-height: none; overflow: visible; }
+
+/* Panel title doubles as a link to the mailbox */
+.tlabel-link {
+    margin-left: auto; background: none; border: none; cursor: pointer; padding: 0;
+    font-family: var(--font-mono); font-size: 0.74rem; letter-spacing: 0.1em; color: var(--muted);
+}
+.tlabel-link:hover { color: var(--violet); text-decoration: underline; }
+
+/* Inbox page (separate two-pane layout) responsive stacking */
 @media (max-width: 820px) {
     .mailbox { flex-direction: column; height: auto; }
     .mail-list { width: auto; max-height: 320px; }
     .mail-preview { overflow: visible; }
+
+    .dash { height: auto; }
+    .dash-split { flex-direction: column; }
+    .dash-list { width: auto; max-height: 280px; border-right: none; border-bottom: 1px solid var(--border); }
+    .dash-pane-scroll { overflow: visible; }
 }
 
 /* ---------- Auth ---------- */

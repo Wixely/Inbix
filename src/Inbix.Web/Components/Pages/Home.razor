@@ -1,125 +1,163 @@
 @page "/"
-@inject IAliasRepository Aliases
+@rendermode InteractiveServer
+@implements IDisposable
+@inject IMessageRepository Messages
+@inject NavigationManager Nav
 
-<section class="hero">
-    <div class="hero-copy">
-        <span class="pill">Inbound-only mail server</span>
-        <h1 class="hero-title">Permanent aliases<span class="accent">_</span><br />that just <span class="accent">arrive.</span></h1>
-        <p class="lead">
-            Inbix receives real email for addresses like <code>spotify@yourdomain</code>,
-            accepts only the aliases you choose, stores every message, and never sends a thing.
-        </p>
-        <div class="btn-row">
-            <a class="btn btn-primary" href="aliases">Manage aliases ↗</a>
-            <a class="btn btn-ghost" href="audit">View audit log</a>
-        </div>
+<div class="page-head"><h1>Recent mail</h1></div>
+<p class="muted page-note">
+    The 5 latest messages across all mailboxes.
+    @if (_userInteracted)
+    {
+        <span>Auto-refresh paused while you read.</span>
+    }
+    else
+    {
+        <span>Auto-refreshing every 20s — newest opens automatically.</span>
+    }
+</p>
+
+<div class="art-card dash">
+    <div class="art-head">
+        <span class="tdot r"></span><span class="tdot a"></span><span class="tdot g"></span>
+        @if (_selected is not null)
+        {
+            <button class="tlabel-link" @onclick="OpenInMailbox" title="Open @_selected.MailboxLabel inbox">@_selected.MailboxLabel ↗</button>
+        }
+        else
+        {
+            <span class="tlabel">INBIX</span>
+        }
     </div>
 
-    <div class="hero-art">
-        <div class="art-card">
-            <div class="art-head">
-                <span class="tdot r"></span><span class="tdot a"></span><span class="tdot g"></span>
-                <span class="tlabel">SMTP · :25</span>
-            </div>
-            <pre class="art-body"><span class="in">&gt;</span> <span class="cmd">MAIL FROM:&lt;noreply@spotify.com&gt;</span>
-<span class="ok">250</span> 2.1.0 Sender OK
-<span class="in">&gt;</span> <span class="cmd">RCPT TO:&lt;spotify@yourdomain&gt;</span>
-<span class="ok">250</span> 2.1.5 Recipient OK
-<span class="in">&gt;</span> <span class="cmd">DATA</span>
-<span class="ok">354</span> Start mail input
-<span class="in">&gt;</span> <span class="cmd">.</span>
-<span class="ok">250</span> Stored — parsing async</pre>
+    <div class="dash-split">
+        <div class="dash-list">
+            @if (_recent is null)
+            {
+                <p class="muted pad">Loading…</p>
+            }
+            else if (_recent.Count == 0)
+            {
+                <p class="muted pad">No mail received yet.</p>
+            }
+            else
+            {
+                @foreach (var m in _recent)
+                {
+                    <button type="button" class="mail-card @(m.Id == _selectedId ? "active" : "")" @onclick="() => SelectManual(m.Id)">
+                        <div class="mail-card-row">
+                            <span class="mail-from">@(string.IsNullOrWhiteSpace(m.Sender) ? "(unknown sender)" : m.Sender)</span>
+                            <span class="chip">@m.MailboxLabel</span>
+                        </div>
+                        <div class="mail-subject">
+                            @(string.IsNullOrWhiteSpace(m.Subject) ? "(no subject)" : m.Subject)
+                            @if (!m.Parsed)
+                            {
+                                <span class="badge off">unparsed</span>
+                            }
+                        </div>
+                        <div class="mail-when">@FmtDateTime(m.ReceivedAt) <span class="when-sep">&middot;</span> @Ago(m.ReceivedAt)</div>
+                    </button>
+                }
+            }
+        </div>
+
+        <div class="dash-pane">
+            @if (_selected is null)
+            {
+                <div class="preview-empty muted">@(_recent is { Count: > 0 } ? "Select a message." : "Waiting for mail…")</div>
+            }
+            else
+            {
+                <div class="dash-pane-head">
+                    <h2 class="msg-subject">@(string.IsNullOrWhiteSpace(_selected.Subject) ? "(no subject)" : _selected.Subject)</h2>
+                    <button class="btn btn-primary dash-open" @onclick="OpenInMailbox" title="Open in @_selected.MailboxLabel">
+                        Open
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6" /><path d="M10 14 21 3" /><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /></svg>
+                    </button>
+                </div>
+                <div class="dash-pane-scroll">
+                    <div class="kv"><span>From</span><span>@(_selected.Sender ?? "—")</span></div>
+                    <div class="kv"><span>To</span><span>@_selected.Recipient</span></div>
+                    <div class="kv"><span>Mailbox</span><span>@_selected.MailboxLabel</span></div>
+                    <div class="kv"><span>Received</span><span>@_selected.ReceivedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</span></div>
+
+                    <pre class="text-view dash-text">@(_selectedText ?? (_selected.Parsed ? "(no text body)" : "(parsing…)"))</pre>
+                </div>
+            }
         </div>
     </div>
-</section>
-
-<section class="stat-strip">
-    <div class="stat">
-        <div class="stat-ic violet">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18" /><path d="M7 14l3-3 3 3 5-6" /></svg>
-        </div>
-        <div>
-            <div class="stat-value">@(_aliases?.Count.ToString() ?? "…")</div>
-            <div class="stat-label">Aliases configured</div>
-        </div>
-    </div>
-    <div class="stat">
-        <div class="stat-ic teal">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><path d="M22 4 12 14.01l-3-3" /></svg>
-        </div>
-        <div>
-            <div class="stat-value">@(_aliases?.Count(a => a.Enabled).ToString() ?? "…")</div>
-            <div class="stat-label">Enabled &amp; accepting</div>
-        </div>
-    </div>
-    <div class="stat">
-        <div class="stat-ic coral">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64A9 9 0 1 1 5.64 6.64" /><line x1="12" y1="2" x2="12" y2="12" /></svg>
-        </div>
-        <div>
-            <div class="stat-value">0</div>
-            <div class="stat-label">Messages ever sent</div>
-        </div>
-    </div>
-</section>
-
-<div class="section-head">
-    <span class="eyebrow">Capabilities <span class="dot"></span></span>
-</div>
-
-<div class="feature-grid">
-    <article class="feature-card">
-        <div class="feature-top">
-            <div class="feature-icon violet">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" /></svg>
-            </div>
-            <span class="feature-num">01</span>
-        </div>
-        <h3>SMTP<br />Receiver</h3>
-        <p>Listens on port 25 and validates every recipient at RCPT&nbsp;TO — unknown aliases get a clean 550.</p>
-        <a class="feature-go violet" href="aliases">→</a>
-    </article>
-
-    <article class="feature-card">
-        <div class="feature-top">
-            <div class="feature-icon coral">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4" /><path d="M16 12v1.5a2.5 2.5 0 0 0 5 0V12a9 9 0 1 0-3.5 7.1" /></svg>
-            </div>
-            <span class="feature-num">02</span>
-        </div>
-        <h3>Alias<br />Registry</h3>
-        <p>Permanent addresses you can enable or disable. Deleted aliases stay rejected by default.</p>
-        <a class="feature-go coral" href="aliases">→</a>
-    </article>
-
-    <article class="feature-card">
-        <div class="feature-top">
-            <div class="feature-icon amber">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2" /><polyline points="2 17 12 22 22 17" /><polyline points="2 12 12 17 22 12" /></svg>
-            </div>
-            <span class="feature-num">03</span>
-        </div>
-        <h3>MIME<br />Parsing</h3>
-        <p>Raw message stored instantly, then headers, body and attachments parsed asynchronously.</p>
-        <a class="feature-go amber" href="aliases">→</a>
-    </article>
-
-    <article class="feature-card">
-        <div class="feature-top">
-            <div class="feature-icon teal">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8M12 17v4" /></svg>
-            </div>
-            <span class="feature-num">04</span>
-        </div>
-        <h3>Read-only<br />Access</h3>
-        <p>Browse every message through this UI or the JSON API. Inbix only ever reads them back.</p>
-        <a class="feature-go teal" href="audit">→</a>
-    </article>
 </div>
 
 @code {
-    private IReadOnlyList<Alias>? _aliases;
+    private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(20);
+
+    private IReadOnlyList<RecentMessage>? _recent;
+    private RecentMessage? _selected;
+    private string? _selectedText;
+    private long? _selectedId;
+    private bool _userInteracted;
+    private System.Threading.Timer? _timer;
 
     protected override async Task OnInitializedAsync()
-        => _aliases = await Aliases.ListAsync();
+    {
+        await RefreshAsync();
+        _timer = new System.Threading.Timer(_ => _ = TickAsync(), null, RefreshInterval, RefreshInterval);
+    }
+
+    private async Task TickAsync()
+    {
+        if (_userInteracted) return;
+        try
+        {
+            await InvokeAsync(async () =>
+            {
+                await RefreshAsync();
+                StateHasChanged();
+            });
+        }
+        catch { /* ignore transient refresh errors */ }
+    }
+
+    private async Task RefreshAsync()
+    {
+        _recent = await Messages.ListRecentAsync(5);
+        if (!_userInteracted)
+            _selectedId = _recent.FirstOrDefault()?.Id; // newest open by default
+        await LoadSelectedAsync();
+    }
+
+    private async Task LoadSelectedAsync()
+    {
+        _selected = _recent?.FirstOrDefault(m => m.Id == _selectedId);
+        _selectedText = _selected is null ? null : (await Messages.GetBodyAsync(_selected.Id))?.TextBody;
+    }
+
+    private async Task SelectManual(long id)
+    {
+        _userInteracted = true;       // stop auto-refresh/auto-select once the user picks a message
+        _timer?.Dispose();
+        _timer = null;
+        _selectedId = id;
+        await LoadSelectedAsync();
+    }
+
+    private void OpenInMailbox()
+    {
+        if (_selected is not null)
+            Nav.NavigateTo($"aliases/{_selected.AliasId}/inbox?m={_selected.Id}");
+    }
+
+    private static string FmtDateTime(DateTimeOffset t) => t.ToLocalTime().ToString("MMM d, yyyy HH:mm");
+
+    private static string Ago(DateTimeOffset when)
+    {
+        var d = DateTimeOffset.UtcNow - when;
+        if (d.TotalSeconds < 60) return "just now";
+        if (d.TotalMinutes < 60) return $"{(int)d.TotalMinutes} min ago";
+        if (d.TotalHours < 24) return $"{(int)d.TotalHours} h ago";
+        return $"{(int)d.TotalDays} d ago";
+    }
+
+    public void Dispose() => _timer?.Dispose();
 }

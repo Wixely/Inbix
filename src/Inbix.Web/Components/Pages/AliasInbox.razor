@@ -68,6 +68,9 @@ else
 @code {
     [Parameter] public long AliasId { get; set; }
 
+    /// <summary>Optional message to preselect (e.g. when arriving from the dashboard's "Open in mailbox").</summary>
+    [SupplyParameterFromQuery(Name = "m")] public long? PreselectId { get; set; }
+
     private Alias? _alias;
     private IReadOnlyList<InboxItem>? _items;
     private long? _selectedId;
@@ -78,17 +81,23 @@ else
 
     protected override async Task OnParametersSetAsync()
     {
-        if (AliasId == _loadedAliasId) return;
-        _loadedAliasId = AliasId;
-        _selectedId = null;
-
-        _alias = await AliasRepo.GetByIdAsync(AliasId);
-        if (_alias is not null)
+        if (AliasId != _loadedAliasId)
         {
-            _items = await Messages.ListByAliasWithPreviewAsync(AliasId, 100, 0);
-            _selectedId = _items.FirstOrDefault()?.Id; // auto-open the newest, like a mail client
+            _loadedAliasId = AliasId;
+            _selectedId = null;
+            _alias = await AliasRepo.GetByIdAsync(AliasId);
+            _items = _alias is null ? null : await Messages.ListByAliasWithPreviewAsync(AliasId, 100, 0);
+            _loaded = true;
         }
-        _loaded = true;
+
+        if (_items is { Count: > 0 })
+        {
+            // Preselect the message from ?m= if present, otherwise default to the newest.
+            if (PreselectId is long pid && _items.Any(i => i.Id == pid))
+                _selectedId = pid;
+            else
+                _selectedId ??= _items[0].Id;
+        }
     }
 
     private static string FormatTime(DateTimeOffset t)

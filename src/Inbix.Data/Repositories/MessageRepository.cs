@@ -65,6 +65,23 @@ public sealed class MessageRepository : IMessageRepository
         return rows.ToList();
     }
 
+    public async Task<IReadOnlyList<RecentMessage>> ListRecentAsync(int limit, CancellationToken ct = default)
+    {
+        await using var c = await _factory.OpenConnectionAsync(ct).ConfigureAwait(false);
+        var rows = await c.QueryAsync<RecentMessage>(
+            """
+            SELECT m.id, m.alias_id, m.sender, m.subject, m.recipient, m.received_at, m.size_bytes, m.parsed,
+                   substr(b.text_body, 1, 200) AS snippet,
+                   a.local_part AS alias_local_part, a.domain AS alias_domain, a.is_catch_all AS alias_is_catch_all
+            FROM messages m
+            JOIN aliases a ON a.id = m.alias_id
+            LEFT JOIN message_bodies b ON b.message_id = m.id
+            ORDER BY m.received_at DESC, m.id DESC
+            LIMIT @limit;
+            """, new { limit }).ConfigureAwait(false);
+        return rows.ToList();
+    }
+
     public async Task<MessageBody?> GetBodyAsync(long messageId, CancellationToken ct = default)
     {
         await using var c = await _factory.OpenConnectionAsync(ct).ConfigureAwait(false);
