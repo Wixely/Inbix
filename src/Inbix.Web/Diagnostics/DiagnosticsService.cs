@@ -4,6 +4,7 @@ using System.Security.Cryptography.X509Certificates;
 using DnsClient;
 using DnsClient.Protocol;
 using Inbix.Core.Abstractions;
+using Inbix.Core.Domain;
 using Inbix.Core.Options;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
@@ -12,7 +13,7 @@ namespace Inbix.Web.Diagnostics;
 
 /// <summary>
 /// Runs configuration / environment diagnostics for the status page: database and storage health,
-/// alias/auth/TLS configuration, and DNS-facing checks (public IP, MX records, MX→A match, rDNS)
+/// alias/auth/TLS configuration, and DNS-facing checks (public IP, MX records, MX-to-IP match, rDNS)
 /// that catch the most common inbound-mail misconfigurations.
 /// </summary>
 public sealed class DiagnosticsService
@@ -49,6 +50,7 @@ public sealed class DiagnosticsService
         CheckSecurity(results);
         CheckTls(results);
         await CheckSmtpListenerAsync(results, ct);
+        await CheckRcptAsync(results, ct);
         await CheckDnsAsync(results, ct);
 
         return results;
@@ -204,6 +206,100 @@ public sealed class DiagnosticsService
         {
             results.Add(new(cat, "SMTP listener", DiagnosticStatus.Error, $"Not accepting connections on port {port}.", ex.Message));
         }
+    }
+
+    private async Task CheckRcptAsync(List<DiagnosticResult> results, CancellationToken ct)
+    {
+        const string cat = "SMTP";
+        var domain = _options.Domains.Select(d => d.Trim()).FirstOrDefault(d => d.Length > 0);
+        if (domain is null)
+        {
+            results.Add(new(cat, "RCPT validation", DiagnosticStatus.Info, "No domain configured to test."));
+            return;
+        }
+
+        IReadOnlyList<Alias> aliases;
+        try { aliases = await _aliases.ListAsync(ct); }
+        catch (Exception ex) { results.Add(new(cat, "RCPT validation", DiagnosticStatus.Error, "Could not read aliases.", ex.Message)); return; }
+
+        var sample = aliases.FirstOrDefault(a => a.Enabled && !a.IsCatchAll);
+        var catchAllOn = aliases.Any(a => a.IsCatchAll && a.Enabled);
+
+        try
+        {
+            using var tcp = new TcpClient();
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(7));
+            var token = cts.Token;
+
+            await tcp.ConnectAsync(IPAddress.Loopback, _options.Smtp.Port, token);
+            await using var stream = tcp.GetStream();
+            using var reader = new StreamReader(stream);
+            await using var writer = new StreamWriter(stream) { NewLine = "\r\n", AutoFlush = true };
+
+            await ReadReplyAsync(reader, token);                       // 220 greeting
+            await writer.WriteLineAsync("EHLO inbix-diagnostics");
+            await ReadReplyAsync(reader, token);                       // EHLO capabilities
+
+            // Positive case: a known, enabled alias must be accepted.
+            if (sample is not null)
+            {
+                await writer.WriteLineAsync($"MAIL FROM:<diagnostics@{domain}>");
+                await ReadReplyAsync(reader, token);
+                await writer.WriteLineAsync($"RCPT TO:<{sample.Address}>");
+                var (code, line) = await ReadReplyAsync(reader, token);
+                results.Add(code == 250
+                    ? new(cat, "RCPT (known alias)", DiagnosticStatus.Ok, $"{sample.Address} accepted (250).")
+                    : new(cat, "RCPT (known alias)", DiagnosticStatus.Error, $"Expected 250 for {sample.Address}.", line));
+                await writer.WriteLineAsync("RSET");
+                await ReadReplyAsync(reader, token);
+            }
+            else
+            {
+                results.Add(new(cat, "RCPT (known alias)", DiagnosticStatus.Info, "No enabled alias available to test acceptance."));
+            }
+
+            // Negative case: an unknown recipient. Rejected normally; accepted when catch-all is on.
+            var probe = $"inbix-diag-{Guid.NewGuid():N}@{domain}";
+            await writer.WriteLineAsync($"MAIL FROM:<diagnostics@{domain}>");
+            await ReadReplyAsync(reader, token);
+            await writer.WriteLineAsync($"RCPT TO:<{probe}>");
+            var (uCode, uLine) = await ReadReplyAsync(reader, token);
+
+            if (catchAllOn)
+                results.Add(uCode == 250
+                    ? new(cat, "RCPT (unknown, catch-all on)", DiagnosticStatus.Ok, "Unknown recipient accepted by the catch-all (250).")
+                    : new(cat, "RCPT (unknown, catch-all on)", DiagnosticStatus.Warning, "Catch-all is enabled but the recipient was not accepted.", uLine));
+            else
+                results.Add(uCode is >= 500 and < 600
+                    ? new(cat, "RCPT (unknown)", DiagnosticStatus.Ok, $"Unknown recipient correctly rejected ({uCode}).")
+                    : new(cat, "RCPT (unknown)", DiagnosticStatus.Warning, $"Expected a 5xx rejection for an unknown recipient, got {uCode}.", uLine));
+
+            await writer.WriteLineAsync("QUIT");
+        }
+        catch (OperationCanceledException)
+        {
+            results.Add(new(cat, "RCPT validation", DiagnosticStatus.Error, "SMTP self-test timed out."));
+        }
+        catch (Exception ex)
+        {
+            results.Add(new(cat, "RCPT validation", DiagnosticStatus.Error, "SMTP self-test failed.", ex.Message));
+        }
+    }
+
+    /// <summary>Read one (possibly multi-line) SMTP reply; returns its status code and last line.</summary>
+    private static async Task<(int code, string text)> ReadReplyAsync(StreamReader reader, CancellationToken ct)
+    {
+        string? line;
+        var last = string.Empty;
+        while ((line = await reader.ReadLineAsync(ct)) is not null)
+        {
+            last = line;
+            if (line.Length >= 4 && line[3] == '-') continue; // continuation line
+            break;
+        }
+        var code = last.Length >= 3 && int.TryParse(last.AsSpan(0, 3), out var c) ? c : 0;
+        return (code, last);
     }
 
     private async Task CheckDnsAsync(List<DiagnosticResult> results, CancellationToken ct)

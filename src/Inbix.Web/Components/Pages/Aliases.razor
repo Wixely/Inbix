@@ -4,29 +4,14 @@
 @inject IAuditRepository Audit
 @inject IOptions<InbixOptions> Options
 
-<h1>Aliases</h1>
-
-<div class="panel">
-    <h2>Create alias</h2>
-    <div class="form-row">
-        <input class="input" placeholder="local part (e.g. spotify)" @bind="_newLocalPart" />
-        <span class="at">@@@DefaultDomain</span>
-        <input class="input" placeholder="notes (optional)" @bind="_newNotes" />
-        <button class="btn" @onclick="CreateAsync" disabled="@_busy">Add</button>
-    </div>
-    @if (_error is not null)
-    {
-        <p class="error">@_error</p>
-    }
+<div class="page-head">
+    <h1>Aliases</h1>
+    <button class="btn btn-primary" @onclick="OpenCreate" disabled="@_creating">+ New alias</button>
 </div>
 
 @if (_aliases is null)
 {
     <p>Loading…</p>
-}
-else if (_aliases.Count == 0)
-{
-    <p class="muted">No aliases yet. Create one above.</p>
 }
 else
 {
@@ -35,15 +20,58 @@ else
             <tr><th>Address</th><th>Status</th><th>Created</th><th>Notes</th><th></th></tr>
         </thead>
         <tbody>
-            @foreach (var a in _aliases)
+            @if (_creating)
             {
-                <tr>
-                    <td><a href="@($"aliases/{a.Id}/inbox")">@a.Address</a></td>
-                    <td><span class="badge @(a.Enabled ? "ok" : "off")">@(a.Enabled ? "enabled" : "disabled")</span></td>
-                    <td>@a.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
-                    <td class="muted">@a.Notes</td>
-                    <td><button class="btn-link" @onclick="() => ToggleAsync(a)">@(a.Enabled ? "Disable" : "Enable")</button></td>
+                @EditorRow
+            }
+
+            @if (CatchAll is { } ca)
+            {
+                <tr class="catchall-row">
+                    <td>
+                        <a href="@($"aliases/{ca.Id}/inbox")">Catch-all</a>
+                        <div class="muted catchall-hint">Stores mail for any address on your domains</div>
+                    </td>
+                    <td>
+                        <label class="switch" title="@(ca.Enabled ? "Click to disable" : "Click to enable")">
+                            <input type="checkbox" checked="@ca.Enabled" @onchange="() => ToggleAsync(ca)" />
+                            <span class="slider"></span>
+                            <span class="switch-label">@(ca.Enabled ? "Enabled" : "Disabled")</span>
+                        </label>
+                    </td>
+                    <td class="muted">—</td>
+                    <td class="muted">@ca.Notes</td>
+                    <td class="row-actions"></td>
                 </tr>
+            }
+
+            @foreach (var a in Regular)
+            {
+                @if (_editingId == a.Id)
+                {
+                    @EditorRow
+                }
+                else
+                {
+                    <tr>
+                        <td><a href="@($"aliases/{a.Id}/inbox")">@a.Address</a></td>
+                        <td>
+                            <label class="switch" title="@(a.Enabled ? "Click to disable" : "Click to enable")">
+                                <input type="checkbox" checked="@a.Enabled" @onchange="() => ToggleAsync(a)" />
+                                <span class="slider"></span>
+                                <span class="switch-label">@(a.Enabled ? "Enabled" : "Disabled")</span>
+                            </label>
+                        </td>
+                        <td>@a.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                        <td class="muted">@a.Notes</td>
+                        <td class="row-actions"><button class="btn-link" @onclick="() => OpenEdit(a)">Edit</button></td>
+                    </tr>
+                }
+            }
+
+            @if (!Regular.Any() && !_creating)
+            {
+                <tr><td colspan="5" class="muted empty-row">No aliases yet — click “New alias” to add one.</td></tr>
             }
         </tbody>
     </table>
@@ -51,34 +79,120 @@ else
 
 @code {
     private IReadOnlyList<Alias>? _aliases;
-    private string _newLocalPart = string.Empty;
-    private string _newNotes = string.Empty;
+    private List<string> _domains = [];
+
+    private bool _creating;
+    private long? _editingId;
+    private string _formLocalPart = string.Empty;
+    private string _formDomain = string.Empty;
+    private string _formNotes = string.Empty;
     private string? _error;
     private bool _busy;
 
-    private string DefaultDomain => Options.Value.Domains.FirstOrDefault() ?? "(no domain configured)";
+    private string FormAddress => $"{_formLocalPart}@{_formDomain}";
 
-    protected override async Task OnInitializedAsync() => await ReloadAsync();
+    private Alias? CatchAll => _aliases?.FirstOrDefault(a => a.IsCatchAll);
+    private IEnumerable<Alias> Regular => _aliases?.Where(a => !a.IsCatchAll) ?? [];
+
+    // Shared inline editor used for both create (blank row at the top) and edit (in place of the row).
+    private RenderFragment EditorRow => @<tr class="edit-row">
+        <td colspan="5">
+            <div class="form-row">
+                @if (_editingId is null)
+                {
+                    <input class="input" placeholder="local part (e.g. spotify)" @bind="_formLocalPart" />
+                    <span class="at">@@</span>
+                    @if (_domains.Count > 1)
+                    {
+                        <select class="input" @bind="_formDomain">
+                            @foreach (var d in _domains)
+                            {
+                                <option value="@d">@d</option>
+                            }
+                        </select>
+                    }
+                    else
+                    {
+                        <span class="at">@_formDomain</span>
+                    }
+                }
+                else
+                {
+                    <span class="readonly-address" title="Aliases are permanent and can't be renamed.">@FormAddress</span>
+                }
+                <input class="input grow" placeholder="notes (optional)" @bind="_formNotes" />
+                <button class="btn btn-primary" @onclick="SaveAsync" disabled="@_busy">@(_editingId is null ? "Create" : "Save")</button>
+                <button class="btn-ghost" @onclick="Cancel" disabled="@_busy">Cancel</button>
+            </div>
+            @if (_error is not null)
+            {
+                <p class="error inline-error">@_error</p>
+            }
+        </td>
+    </tr>;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _domains = Options.Value.Domains
+            .Where(d => !string.IsNullOrWhiteSpace(d))
+            .Select(d => d.Trim().ToLowerInvariant())
+            .ToList();
+        await ReloadAsync();
+    }
 
     private async Task ReloadAsync() => _aliases = await AliasRepo.ListAsync();
 
-    private async Task CreateAsync()
+    private void OpenCreate()
+    {
+        _editingId = null;
+        _creating = true;
+        _formLocalPart = string.Empty;
+        _formDomain = _domains.FirstOrDefault() ?? string.Empty;
+        _formNotes = string.Empty;
+        _error = null;
+    }
+
+    private void OpenEdit(Alias a)
+    {
+        _creating = false;
+        _editingId = a.Id;
+        _formLocalPart = a.LocalPart;
+        _formDomain = a.Domain;
+        _formNotes = a.Notes ?? string.Empty;
+        _error = null;
+    }
+
+    private void Cancel()
+    {
+        _creating = false;
+        _editingId = null;
+        _error = null;
+    }
+
+    private async Task SaveAsync()
     {
         _error = null;
-        var error = Inbix.Core.Validation.AliasRules.ValidateLocalPart(_newLocalPart);
-        if (error is not null) { _error = error; return; }
-
-        var domain = Options.Value.Domains.FirstOrDefault();
-        if (string.IsNullOrWhiteSpace(domain)) { _error = "No domain configured (set Inbix:Domains)."; return; }
-
         _busy = true;
         try
         {
-            var localPart = Inbix.Core.Validation.AliasRules.Normalize(_newLocalPart);
-            var created = await AliasRepo.CreateAsync(localPart, domain, string.IsNullOrWhiteSpace(_newNotes) ? null : _newNotes);
-            await Audit.WriteAsync(new AuditEntry { Action = "alias.create", TargetType = "alias", TargetId = created.Id.ToString(), Actor = "ui", CreatedAt = DateTimeOffset.UtcNow });
-            _newLocalPart = string.Empty;
-            _newNotes = string.Empty;
+            if (_editingId is null)
+            {
+                var error = Inbix.Core.Validation.AliasRules.ValidateLocalPart(_formLocalPart);
+                if (error is not null) { _error = error; return; }
+                if (string.IsNullOrWhiteSpace(_formDomain)) { _error = "No domain configured (set Inbix:Domains)."; return; }
+
+                var localPart = Inbix.Core.Validation.AliasRules.Normalize(_formLocalPart);
+                var created = await AliasRepo.CreateAsync(localPart, _formDomain, string.IsNullOrWhiteSpace(_formNotes) ? null : _formNotes);
+                await Audit.WriteAsync(new AuditEntry { Action = "alias.create", TargetType = "alias", TargetId = created.Id.ToString(), Actor = "ui", CreatedAt = DateTimeOffset.UtcNow });
+            }
+            else
+            {
+                // Pass the raw value (empty string clears the note); enabled stays unchanged.
+                await AliasRepo.UpdateAsync(_editingId.Value, enabled: null, notes: _formNotes);
+                await Audit.WriteAsync(new AuditEntry { Action = "alias.update", TargetType = "alias", TargetId = _editingId.Value.ToString(), Actor = "ui", CreatedAt = DateTimeOffset.UtcNow });
+            }
+
+            Cancel();
             await ReloadAsync();
         }
         catch (Exception ex)
@@ -92,7 +206,7 @@ else
 
     private async Task ToggleAsync(Alias a)
     {
-        await AliasRepo.UpdateAsync(a.Id, !a.Enabled, null);
+        await AliasRepo.UpdateAsync(a.Id, enabled: !a.Enabled, notes: null);
         await Audit.WriteAsync(new AuditEntry { Action = a.Enabled ? "alias.disable" : "alias.enable", TargetType = "alias", TargetId = a.Id.ToString(), Actor = "ui", CreatedAt = DateTimeOffset.UtcNow });
         await ReloadAsync();
     }

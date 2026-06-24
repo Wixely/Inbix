@@ -1,3 +1,5 @@
+@inject IAliasRepository AliasRepo
+
 <nav class="nav">
     <span class="nav-label">Menu</span>
     <NavLink class="nav-item" href="" Match="NavLinkMatch.All">
@@ -16,4 +18,45 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></svg>
         Status
     </NavLink>
+
+    <details class="nav-group" open>
+        <summary class="nav-item nav-summary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2" /><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /></svg>
+            <span class="nav-summary-label">Inboxes</span>
+            <svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+        </summary>
+        <div class="nav-sub">
+            @if (_inboxes.Count == 0)
+            {
+                <span class="nav-sub-empty">No inboxes yet</span>
+            }
+            else
+            {
+                @foreach (var box in _inboxes)
+                {
+                    <NavLink class="nav-subitem" href="@($"aliases/{box.Id}/inbox")">
+                        @(box.IsCatchAll ? "Catch-all" : box.Address)
+                    </NavLink>
+                }
+            }
+        </div>
+    </details>
 </nav>
+
+@code {
+    private IReadOnlyList<Alias> _inboxes = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var all = await AliasRepo.ListAsync();
+        var list = new List<Alias>();
+
+        // Catch-all appears only when enabled; specific aliases always appear.
+        var catchAll = all.FirstOrDefault(a => a.IsCatchAll);
+        if (catchAll is { Enabled: true })
+            list.Add(catchAll);
+
+        list.AddRange(all.Where(a => !a.IsCatchAll).OrderBy(a => a.Address, StringComparer.OrdinalIgnoreCase));
+        _inboxes = list;
+    }
+}

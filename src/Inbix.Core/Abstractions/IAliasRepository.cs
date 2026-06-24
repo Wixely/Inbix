@@ -7,6 +7,9 @@ public interface IAliasRepository
     /// <summary>Look up an alias by its address parts. Used during RCPT TO validation.</summary>
     Task<Alias?> FindAsync(string localPart, string domain, CancellationToken ct = default);
 
+    /// <summary>The single permanent catch-all record, or null if absent.</summary>
+    Task<Alias?> GetCatchAllAsync(CancellationToken ct = default);
+
     Task<Alias?> GetByIdAsync(long id, CancellationToken ct = default);
 
     Task<IReadOnlyList<Alias>> ListAsync(CancellationToken ct = default);

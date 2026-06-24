@@ -6,27 +6,38 @@
 
 @if (_alias is null)
 {
-    <p>Loading…</p>
+    <p>@(_loaded ? "Inbox not found." : "Loading…")</p>
 }
 else
 {
-    <p class="muted"><a href="aliases">← Aliases</a> &nbsp;|&nbsp; <strong>@_alias.Address</strong></p>
+    <p class="muted"><a href="aliases">← Aliases</a> &nbsp;|&nbsp; <strong>@Title</strong></p>
 
     @if (_messages is null || _messages.Count == 0)
     {
-        <p class="muted">No messages received for this alias yet.</p>
+        <p class="muted">No messages received for this inbox yet.</p>
     }
     else
     {
         <table class="grid">
             <thead>
-                <tr><th>Received</th><th>From</th><th>Subject</th><th>Size</th><th></th></tr>
+                <tr>
+                    <th>Received</th>
+                    @if (_alias.IsCatchAll)
+                    {
+                        <th>To</th>
+                    }
+                    <th>From</th><th>Subject</th><th>Size</th><th></th>
+                </tr>
             </thead>
             <tbody>
                 @foreach (var m in _messages)
                 {
                     <tr>
                         <td>@m.ReceivedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                        @if (_alias.IsCatchAll)
+                        {
+                            <td>@m.Recipient</td>
+                        }
                         <td>@(m.Sender ?? "—")</td>
                         <td>
                             <a href="@($"messages/{m.Id}")">@(string.IsNullOrWhiteSpace(m.Subject) ? "(no subject)" : m.Subject)</a>
@@ -49,12 +60,16 @@ else
 
     private Alias? _alias;
     private IReadOnlyList<Message>? _messages;
+    private bool _loaded;
+
+    private string Title => _alias is null ? "" : _alias.IsCatchAll ? "Catch-all" : _alias.Address;
 
     protected override async Task OnInitializedAsync()
     {
         _alias = await AliasRepo.GetByIdAsync(AliasId);
         if (_alias is not null)
             _messages = await Messages.ListByAliasAsync(AliasId, 100, 0);
+        _loaded = true;
     }
 
     private static string FormatSize(long bytes) => bytes switch

@@ -7,7 +7,7 @@ namespace Inbix.Data.Repositories;
 public sealed class AliasRepository : IAliasRepository
 {
     private const string Columns =
-        "id, local_part, domain, enabled, created_at, disabled_at, notes";
+        "id, local_part, domain, enabled, created_at, disabled_at, notes, is_catch_all";
 
     private readonly IDbConnectionFactory _factory;
 
@@ -17,8 +17,15 @@ public sealed class AliasRepository : IAliasRepository
     {
         await using var c = await _factory.OpenConnectionAsync(ct).ConfigureAwait(false);
         return await c.QuerySingleOrDefaultAsync<Alias>(
-            $"SELECT {Columns} FROM aliases WHERE local_part = @localPart AND domain = @domain;",
+            $"SELECT {Columns} FROM aliases WHERE local_part = @localPart AND domain = @domain AND is_catch_all = 0;",
             new { localPart, domain }).ConfigureAwait(false);
+    }
+
+    public async Task<Alias?> GetCatchAllAsync(CancellationToken ct = default)
+    {
+        await using var c = await _factory.OpenConnectionAsync(ct).ConfigureAwait(false);
+        return await c.QuerySingleOrDefaultAsync<Alias>(
+            $"SELECT {Columns} FROM aliases WHERE is_catch_all = 1 LIMIT 1;").ConfigureAwait(false);
     }
 
     public async Task<Alias?> GetByIdAsync(long id, CancellationToken ct = default)

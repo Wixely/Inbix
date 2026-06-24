@@ -48,16 +48,29 @@ public sealed class InboundMessageSink : IInboundMessageSink
 
         try
         {
+            // Prefer a specific enabled alias; otherwise fall back to the catch-all (if enabled and
+            // the recipient is on an accepted domain). Mail is stored under whichever matched.
+            long aliasId;
             var alias = await _aliases.FindAsync(localPart, domain, ct).ConfigureAwait(false);
-            if (alias is not { Enabled: true })
-                return InboundSaveResult.UnknownRecipient;
+            if (alias is { Enabled: true })
+            {
+                aliasId = alias.Id;
+            }
+            else
+            {
+                var catchAll = await _aliases.GetCatchAllAsync(ct).ConfigureAwait(false);
+                if (catchAll is { Enabled: true } && IsAcceptedDomain(domain))
+                    aliasId = catchAll.Id;
+                else
+                    return InboundSaveResult.UnknownRecipient;
+            }
 
             // Persist the raw source first; if metadata write fails we still hold the original.
             var rawPath = await _rawStore.SaveRawAsync(message.RawMime, message.ReceivedAt, ct).ConfigureAwait(false);
 
             var row = new Message
             {
-                AliasId = alias.Id,
+                AliasId = aliasId,
                 SmtpSessionId = message.SmtpSessionId,
                 Recipient = message.Recipient,
                 Sender = message.Sender,
@@ -77,4 +90,8 @@ public sealed class InboundMessageSink : IInboundMessageSink
             return InboundSaveResult.TemporaryFailure;
         }
     }
+
+    private bool IsAcceptedDomain(string domain) =>
+        _options.Domains.Length == 0 ||
+        _options.Domains.Any(d => string.Equals(d.Trim(), domain, StringComparison.OrdinalIgnoreCase));
 }

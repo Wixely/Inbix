@@ -11,5 +11,8 @@ public sealed class Alias
     public DateTimeOffset? DisabledAt { get; set; }
     public string? Notes { get; set; }
 
+    /// <summary>True for the single permanent catch-all record (stores mail for unmatched recipients).</summary>
+    public bool IsCatchAll { get; set; }
+
     public string Address => $"{LocalPart}@{Domain}";
 }
