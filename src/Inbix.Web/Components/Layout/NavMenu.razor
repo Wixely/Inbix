@@ -1,4 +1,6 @@
 @inject IAliasRepository AliasRepo
+@inject AliasChangeNotifier Notifier
+@implements IDisposable
 
 <nav class="nav">
     <span class="nav-label">Menu</span>
@@ -48,6 +50,12 @@
 
     protected override async Task OnInitializedAsync()
     {
+        Notifier.Changed += OnAliasesChanged;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
         var all = await AliasRepo.ListAsync();
         var list = new List<Alias>();
 
@@ -59,4 +67,14 @@
         list.AddRange(all.Where(a => !a.IsCatchAll).OrderBy(a => a.Address, StringComparer.OrdinalIgnoreCase));
         _inboxes = list;
     }
+
+    private void OnAliasesChanged() => _ = RefreshAsync();
+
+    private async Task RefreshAsync()
+    {
+        await LoadAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose() => Notifier.Changed -= OnAliasesChanged;
 }

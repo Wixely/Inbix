@@ -100,6 +100,9 @@ builder.Services.AddSingleton<Inbix.Web.Diagnostics.DiagnosticsService>();
 builder.Services.ConfigureHttpJsonOptions(o =>
     o.SerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter()));
 
+// Notifies the sidebar to refresh its inbox list when aliases change (per-circuit).
+builder.Services.AddScoped<Inbix.Web.Services.AliasChangeNotifier>();
+
 // Web: API + Blazor UI.
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 builder.Services.AddOpenApi();

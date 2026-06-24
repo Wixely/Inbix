@@ -280,6 +280,7 @@ select.input { cursor: pointer; }
 
 .page-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.5rem; }
 .page-head h1 { margin: 0; }
+.page-note { font-size: 0.85rem; margin: 0 0 1.25rem; }
 
 .row-actions { text-align: right; }
 .empty-state { text-align: center; padding: 2.5rem 1rem; }
@@ -381,6 +382,7 @@ select.input { cursor: pointer; }
 /* ---------- Status / diagnostics ---------- */
 
 .status-summary { display: inline-flex; gap: 0.6rem; align-items: center; }
+.last-run { font-size: 0.82rem; margin: 0.6rem 0 0; }
 .status-cell { width: 64px; vertical-align: top; }
 .status-detail { font-size: 0.8rem; margin-top: 0.2rem; word-break: break-word; }
 

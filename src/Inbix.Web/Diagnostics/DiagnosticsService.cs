@@ -39,6 +39,12 @@ public sealed class DiagnosticsService
         _options = options.Value;
     }
 
+    /// <summary>Results of the most recent run (this service is a singleton, so they survive navigation).</summary>
+    public IReadOnlyList<DiagnosticResult>? LastResults { get; private set; }
+
+    /// <summary>When the most recent run completed (UTC), or null if never run since startup.</summary>
+    public DateTimeOffset? LastRunAtUtc { get; private set; }
+
     public async Task<IReadOnlyList<DiagnosticResult>> RunAllAsync(CancellationToken ct = default)
     {
         var results = new List<DiagnosticResult>();
@@ -53,6 +59,8 @@ public sealed class DiagnosticsService
         await CheckRcptAsync(results, ct);
         await CheckDnsAsync(results, ct);
 
+        LastResults = results;
+        LastRunAtUtc = DateTimeOffset.UtcNow;
         return results;
     }
 

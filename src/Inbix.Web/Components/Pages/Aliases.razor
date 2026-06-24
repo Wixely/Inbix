@@ -3,11 +3,17 @@
 @inject IAliasRepository AliasRepo
 @inject IAuditRepository Audit
 @inject IOptions<InbixOptions> Options
+@inject AliasChangeNotifier Notifier
 
 <div class="page-head">
     <h1>Aliases</h1>
     <button class="btn btn-primary" @onclick="OpenCreate" disabled="@_creating">+ New alias</button>
 </div>
+
+<p class="muted page-note">
+    Changes show here immediately, but incoming-mail acceptance is cached and can take up to
+    ~30&nbsp;seconds to take effect — including enabling or disabling the catch-all.
+</p>
 
 @if (_aliases is null)
 {
@@ -194,6 +200,7 @@ else
 
             Cancel();
             await ReloadAsync();
+            Notifier.NotifyChanged();
         }
         catch (Exception ex)
         {
@@ -209,5 +216,6 @@ else
         await AliasRepo.UpdateAsync(a.Id, enabled: !a.Enabled, notes: null);
         await Audit.WriteAsync(new AuditEntry { Action = a.Enabled ? "alias.disable" : "alias.enable", TargetType = "alias", TargetId = a.Id.ToString(), Actor = "ui", CreatedAt = DateTimeOffset.UtcNow });
         await ReloadAsync();
+        Notifier.NotifyChanged();
     }
 }

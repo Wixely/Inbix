@@ -21,6 +21,15 @@ storage, aliases, TLS, the SMTP listener, and DNS (public IP, MX records, MX→I
     }
 </div>
 
+@if (_lastRun is not null)
+{
+    <p class="muted last-run">Last run @_lastRun.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss") (@Ago(_lastRun.Value))</p>
+}
+else
+{
+    <p class="muted last-run">Not run yet this session.</p>
+}
+
 @if (_running && _results is null)
 {
     <p class="muted">Running checks (DNS lookups may take a few seconds)…</p>
@@ -56,7 +65,15 @@ storage, aliases, TLS, the SMTP listener, and DNS (public IP, MX records, MX→I
 
 @code {
     private IReadOnlyList<DiagnosticResult>? _results;
+    private DateTimeOffset? _lastRun;
     private bool _running;
+
+    protected override void OnInitialized()
+    {
+        // Restore the most recent run so navigating away and back keeps the results.
+        _results = Diagnostics.LastResults;
+        _lastRun = Diagnostics.LastRunAtUtc;
+    }
 
     private async Task RunAsync()
     {
@@ -64,11 +81,21 @@ storage, aliases, TLS, the SMTP listener, and DNS (public IP, MX records, MX→I
         try
         {
             _results = await Diagnostics.RunAllAsync();
+            _lastRun = Diagnostics.LastRunAtUtc;
         }
         finally
         {
             _running = false;
         }
+    }
+
+    private static string Ago(DateTimeOffset when)
+    {
+        var elapsed = DateTimeOffset.UtcNow - when;
+        return elapsed.TotalSeconds < 60 ? "just now"
+            : elapsed.TotalMinutes < 60 ? $"{(int)elapsed.TotalMinutes} min ago"
+            : elapsed.TotalHours < 24 ? $"{(int)elapsed.TotalHours} h ago"
+            : $"{(int)elapsed.TotalDays} d ago";
     }
 
     private static string CssFor(DiagnosticStatus s) => s switch
