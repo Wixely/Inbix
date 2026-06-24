@@ -49,6 +49,22 @@ public sealed class MessageRepository : IMessageRepository
         return rows.ToList();
     }
 
+    public async Task<IReadOnlyList<InboxItem>> ListByAliasWithPreviewAsync(long aliasId, int limit, int offset, CancellationToken ct = default)
+    {
+        await using var c = await _factory.OpenConnectionAsync(ct).ConfigureAwait(false);
+        var rows = await c.QueryAsync<InboxItem>(
+            """
+            SELECT m.id, m.sender, m.subject, m.recipient, m.received_at, m.size_bytes, m.parsed,
+                   substr(b.text_body, 1, 200) AS snippet
+            FROM messages m
+            LEFT JOIN message_bodies b ON b.message_id = m.id
+            WHERE m.alias_id = @aliasId
+            ORDER BY m.received_at DESC, m.id DESC
+            LIMIT @limit OFFSET @offset;
+            """, new { aliasId, limit, offset }).ConfigureAwait(false);
+        return rows.ToList();
+    }
+
     public async Task<MessageBody?> GetBodyAsync(long messageId, CancellationToken ct = default)
     {
         await using var c = await _factory.OpenConnectionAsync(ct).ConfigureAwait(false);

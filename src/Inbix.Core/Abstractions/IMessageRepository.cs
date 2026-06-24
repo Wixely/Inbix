@@ -10,6 +10,9 @@ public interface IMessageRepository
 
     Task<IReadOnlyList<Message>> ListByAliasAsync(long aliasId, int limit, int offset, CancellationToken ct = default);
 
+    /// <summary>List messages for an alias with a short text-body snippet, for the inbox card list.</summary>
+    Task<IReadOnlyList<InboxItem>> ListByAliasWithPreviewAsync(long aliasId, int limit, int offset, CancellationToken ct = default);
+
     Task<MessageBody?> GetBodyAsync(long messageId, CancellationToken ct = default);
 
     Task<IReadOnlyList<Attachment>> ListAttachmentsAsync(long messageId, CancellationToken ct = default);

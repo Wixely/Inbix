@@ -1,0 +1,105 @@
+@inject IMessageRepository Messages
+
+@if (_message is null)
+{
+    <p class="muted">@(_loaded ? "Message not found." : "Loading…")</p>
+}
+else
+{
+    <div class="msg-head">
+        <h2 class="msg-subject">@(string.IsNullOrWhiteSpace(_message.Subject) ? "(no subject)" : _message.Subject)</h2>
+        <div class="kv"><span>From</span><span>@(_message.Sender ?? "—")</span></div>
+        <div class="kv"><span>To</span><span>@_message.Recipient</span></div>
+        <div class="kv"><span>Received</span><span>@_message.ReceivedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</span></div>
+        <div class="kv"><span>Raw</span><a href="@($"api/messages/{_message.Id}/raw")" target="_blank">download .eml</a></div>
+        @if (_message.ParseError is not null)
+        {
+            <div class="kv"><span>Parse error</span><span class="error">@_message.ParseError</span></div>
+        }
+    </div>
+
+    @if (_attachments is { Count: > 0 })
+    {
+        <div class="panel att-panel">
+            <h3 class="msg-section">Attachments (@_attachments.Count)</h3>
+            <ul class="att-list">
+                @foreach (var a in _attachments)
+                {
+                    <li>
+                        <a href="@($"api/attachments/{a.Id}/content")" target="_blank">@(a.Filename ?? $"attachment-{a.Id}")</a>
+                        <span class="muted">(@(a.ContentType ?? "?"), @(a.SizeBytes?.ToString() ?? "?") bytes)</span>
+                    </li>
+                }
+            </ul>
+        </div>
+    }
+
+    <div class="msg-bodywrap">
+        <div class="body-toolbar">
+            @if (HasHtml)
+            {
+                <label class="switch" title="Switch between plain text and HTML">
+                    <input type="checkbox" checked="@_showHtml" @onchange="() => _showHtml = !_showHtml" />
+                    <span class="slider"></span>
+                    <span class="switch-label">@(_showHtml ? "HTML" : "Text")</span>
+                </label>
+                <span class="muted body-note">
+                    @(_showHtml ? "Remote images, scripts and fonts are blocked." : "Plain text shown by default for safety.")
+                </span>
+            }
+            else
+            {
+                <span class="muted body-note">Plain text</span>
+            }
+        </div>
+
+        @if (_showHtml && HasHtml)
+        {
+            @* Untrusted HTML: sandbox="" blocks scripts/forms; the injected CSP blocks remote loads. *@
+            <iframe class="html-view" sandbox="" srcdoc="@HtmlSrcDoc"></iframe>
+        }
+        else
+        {
+            <pre class="text-view">@(_body?.TextBody ?? "(no text body)")</pre>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public long MessageId { get; set; }
+
+    private Message? _message;
+    private MessageBody? _body;
+    private IReadOnlyList<Attachment>? _attachments;
+    private bool _loaded;
+    private bool _showHtml;
+    private long _loadedId = -1;
+
+    private const string ContentSecurityPolicy =
+        "default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:; base-uri 'none'; form-action 'none'";
+
+    private bool HasHtml => !string.IsNullOrEmpty(_body?.HtmlBody);
+
+    private string HtmlSrcDoc =>
+        $"<meta http-equiv=\"Content-Security-Policy\" content=\"{ContentSecurityPolicy}\">{_body?.HtmlBody}";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (MessageId == _loadedId) return; // only reload when the selected message changes
+        _loadedId = MessageId;
+        _showHtml = false;
+        _loaded = false;
+        _message = await Messages.GetByIdAsync(MessageId);
+        if (_message is not null)
+        {
+            _body = await Messages.GetBodyAsync(MessageId);
+            _attachments = await Messages.ListAttachmentsAsync(MessageId);
+        }
+        else
+        {
+            _body = null;
+            _attachments = null;
+        }
+        _loaded = true;
+    }
+}

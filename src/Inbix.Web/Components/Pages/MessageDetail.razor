@@ -2,101 +2,29 @@
 @rendermode InteractiveServer
 @inject IMessageRepository Messages
 
-<h1>Message</h1>
-
-@if (_message is null)
-{
-    <p>@(_loaded ? "Message not found." : "Loading…")</p>
-}
-else
-{
-    <p class="muted"><a href="@($"aliases/{_message.AliasId}/inbox")">← Inbox</a></p>
-
-    <div class="panel">
-        <div class="kv"><span>Subject</span><strong>@(string.IsNullOrWhiteSpace(_message.Subject) ? "(no subject)" : _message.Subject)</strong></div>
-        <div class="kv"><span>From</span><span>@(_message.Sender ?? "—")</span></div>
-        <div class="kv"><span>To</span><span>@_message.Recipient</span></div>
-        <div class="kv"><span>Received</span><span>@_message.ReceivedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</span></div>
-        <div class="kv"><span>Raw</span><a href="@($"api/messages/{_message.Id}/raw")" target="_blank">download .eml</a></div>
-        @if (_message.ParseError is not null)
-        {
-            <div class="kv"><span>Parse error</span><span class="error">@_message.ParseError</span></div>
-        }
-    </div>
-
-    @if (_attachments is { Count: > 0 })
+<p class="muted">
+    @if (_aliasId is not null)
     {
-        <div class="panel">
-            <h2>Attachments</h2>
-            <ul>
-                @foreach (var a in _attachments)
-                {
-                    <li>
-                        <a href="@($"api/attachments/{a.Id}/content")" target="_blank">@(a.Filename ?? $"attachment-{a.Id}")</a>
-                        <span class="muted">(@(a.ContentType ?? "?"), @(a.SizeBytes?.ToString() ?? "?") bytes)</span>
-                    </li>
-                }
-            </ul>
-        </div>
+        <a href="@($"aliases/{_aliasId}/inbox")">← Inbox</a>
     }
+    else
+    {
+        <a href="aliases">← Aliases</a>
+    }
+</p>
 
-    <div class="panel">
-        <div class="body-toolbar">
-            @if (HasHtml)
-            {
-                @if (_showHtml)
-                {
-                    <button class="btn-ghost btn-sm" @onclick="() => _showHtml = false">← Show text</button>
-                    <span class="muted body-note">HTML view — remote images, scripts and fonts are blocked.</span>
-                }
-                else
-                {
-                    <button class="btn-ghost btn-sm" @onclick="() => _showHtml = true">Show HTML version</button>
-                    <span class="muted body-note">Plain text shown by default for safety.</span>
-                }
-            }
-        </div>
-
-        @if (_showHtml && HasHtml)
-        {
-            @* Untrusted HTML: sandbox="" blocks scripts/forms; the injected CSP blocks remote
-               resource loads (tracking pixels, external CSS/JS/fonts). *@
-            <iframe class="html-view" sandbox="" srcdoc="@HtmlSrcDoc"></iframe>
-        }
-        else
-        {
-            <pre class="text-view">@(_body?.TextBody ?? "(no text body)")</pre>
-        }
-    </div>
-}
+<div class="panel msg-standalone">
+    <MessageView MessageId="@MessageId" />
+</div>
 
 @code {
     [Parameter] public long MessageId { get; set; }
 
-    private Message? _message;
-    private MessageBody? _body;
-    private IReadOnlyList<Attachment>? _attachments;
-    private bool _loaded;
-    private bool _showHtml;
+    private long? _aliasId;
 
-    // Block remote content (tracking pixels / external CSS/JS/fonts); allow inline styles and
-    // embedded data: images, which legitimate HTML mail commonly uses.
-    private const string ContentSecurityPolicy =
-        "default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:; base-uri 'none'; form-action 'none'";
-
-    private bool HasHtml => !string.IsNullOrEmpty(_body?.HtmlBody);
-
-    private string HtmlSrcDoc =>
-        $"<meta http-equiv=\"Content-Security-Policy\" content=\"{ContentSecurityPolicy}\">{_body?.HtmlBody}";
-
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnParametersSetAsync()
     {
-        _message = await Messages.GetByIdAsync(MessageId);
-        if (_message is not null)
-        {
-            _body = await Messages.GetBodyAsync(MessageId);
-            _attachments = await Messages.ListAttachmentsAsync(MessageId);
-        }
-        _loaded = true;
+        var message = await Messages.GetByIdAsync(MessageId);
+        _aliasId = message?.AliasId;
     }
 }

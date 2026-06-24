@@ -1,8 +1,7 @@
 @page "/aliases/{AliasId:long}/inbox"
+@rendermode InteractiveServer
 @inject IAliasRepository AliasRepo
 @inject IMessageRepository Messages
-
-<h1>Inbox</h1>
 
 @if (_alias is null)
 {
@@ -10,72 +9,94 @@
 }
 else
 {
-    <p class="muted"><a href="aliases">← Aliases</a> &nbsp;|&nbsp; <strong>@Title</strong></p>
+    <div class="page-head">
+        <h1>@Title</h1>
+    </div>
+    <p class="muted page-note"><a href="aliases">← Aliases</a></p>
 
-    @if (_messages is null || _messages.Count == 0)
-    {
-        <p class="muted">No messages received for this inbox yet.</p>
-    }
-    else
-    {
-        <table class="grid">
-            <thead>
-                <tr>
-                    <th>Received</th>
-                    @if (_alias.IsCatchAll)
-                    {
-                        <th>To</th>
-                    }
-                    <th>From</th><th>Subject</th><th>Size</th><th></th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var m in _messages)
+    <div class="mailbox">
+        <div class="mail-list">
+            @if (_items is null)
+            {
+                <p class="muted pad">Loading…</p>
+            }
+            else if (_items.Count == 0)
+            {
+                <p class="muted pad">No messages received for this inbox yet.</p>
+            }
+            else
+            {
+                @foreach (var m in _items)
                 {
-                    <tr>
-                        <td>@m.ReceivedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
-                        @if (_alias.IsCatchAll)
-                        {
-                            <td>@m.Recipient</td>
-                        }
-                        <td>@(m.Sender ?? "—")</td>
-                        <td>
-                            <a href="@($"messages/{m.Id}")">@(string.IsNullOrWhiteSpace(m.Subject) ? "(no subject)" : m.Subject)</a>
+                    <button type="button" class="mail-card @(m.Id == _selectedId ? "active" : "")" @onclick="() => _selectedId = m.Id">
+                        <div class="mail-card-row">
+                            <span class="mail-from">@(string.IsNullOrWhiteSpace(m.Sender) ? "(unknown sender)" : m.Sender)</span>
+                            <span class="mail-time">@FormatTime(m.ReceivedAt)</span>
+                        </div>
+                        <div class="mail-subject">
+                            @(string.IsNullOrWhiteSpace(m.Subject) ? "(no subject)" : m.Subject)
                             @if (!m.Parsed)
                             {
                                 <span class="badge off">unparsed</span>
                             }
-                        </td>
-                        <td>@FormatSize(m.SizeBytes)</td>
-                        <td><a class="btn-link" href="@($"api/messages/{m.Id}/raw")" target="_blank">raw</a></td>
-                    </tr>
+                        </div>
+                        <div class="mail-snippet">
+                            @if (_alias.IsCatchAll)
+                            {
+                                <span class="mail-to">@m.Recipient</span>
+                            }
+                            @Clean(m.Snippet)
+                        </div>
+                    </button>
                 }
-            </tbody>
-        </table>
-    }
+            }
+        </div>
+
+        <div class="mail-preview">
+            @if (_selectedId is null)
+            {
+                <div class="preview-empty muted">Select a message to read it.</div>
+            }
+            else
+            {
+                <MessageView MessageId="@_selectedId.Value" />
+            }
+        </div>
+    </div>
 }
 
 @code {
     [Parameter] public long AliasId { get; set; }
 
     private Alias? _alias;
-    private IReadOnlyList<Message>? _messages;
+    private IReadOnlyList<InboxItem>? _items;
+    private long? _selectedId;
     private bool _loaded;
+    private long _loadedAliasId = -1;
 
     private string Title => _alias is null ? "" : _alias.IsCatchAll ? "Catch-all" : _alias.Address;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnParametersSetAsync()
     {
+        if (AliasId == _loadedAliasId) return;
+        _loadedAliasId = AliasId;
+        _selectedId = null;
+
         _alias = await AliasRepo.GetByIdAsync(AliasId);
         if (_alias is not null)
-            _messages = await Messages.ListByAliasAsync(AliasId, 100, 0);
+        {
+            _items = await Messages.ListByAliasWithPreviewAsync(AliasId, 100, 0);
+            _selectedId = _items.FirstOrDefault()?.Id; // auto-open the newest, like a mail client
+        }
         _loaded = true;
     }
 
-    private static string FormatSize(long bytes) => bytes switch
+    private static string FormatTime(DateTimeOffset t)
     {
-        < 1024 => $"{bytes} B",
-        < 1024 * 1024 => $"{bytes / 1024.0:0.#} KB",
-        _ => $"{bytes / (1024.0 * 1024.0):0.#} MB"
-    };
+        var local = t.ToLocalTime();
+        return local.Date == DateTimeOffset.Now.Date ? local.ToString("HH:mm") : local.ToString("MMM d");
+    }
+
+    private static string Clean(string? snippet) =>
+        string.IsNullOrWhiteSpace(snippet) ? "" : System.Text.RegularExpressions.Regex.Replace(snippet, "\\s+", " ").Trim();
 }
