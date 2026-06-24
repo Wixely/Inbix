@@ -428,6 +428,9 @@ select.input { cursor: pointer; }
 .dash-pane-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 1.6rem 2.1rem 0.6rem; }
 .dash-pane-head .msg-subject { margin: 0; }
 .dash-open { flex-shrink: 0; }
+.promote-hint { align-self: center; }
+/* When the catch-all "Create alias" bar sits above the reader, drop the doubled top padding. */
+.dash-pane-head + .msg-scroll { padding-top: 0.4rem; }
 .dash-pane-scroll { flex: 1; overflow-y: auto; padding: 0.6rem 2.1rem 1.6rem; }
 .dash-text { margin-top: 1rem; max-height: none; overflow: visible; }
 /* Inbox reading pane: full MessageView inside the art-card window */

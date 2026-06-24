@@ -102,6 +102,10 @@ else
 }
 
 @code {
+    // Quick-alias deep link from the catch-all inbox: pre-fill and open the create form.
+    [SupplyParameterFromQuery(Name = "new")] public string? PrefillAddress { get; set; }
+    [SupplyParameterFromQuery(Name = "notes")] public string? PrefillNotes { get; set; }
+
     private IReadOnlyList<Alias>? _aliases;
     private List<string> _domains = [];
 
@@ -164,6 +168,27 @@ else
             .Select(d => d.Trim().ToLowerInvariant())
             .ToList();
         await ReloadAsync();
+
+        if (!string.IsNullOrWhiteSpace(PrefillAddress))
+            PrefillCreateForm(PrefillAddress, PrefillNotes);
+    }
+
+    // Opens the create editor pre-filled from a "?new=address&notes=..." deep link.
+    private void PrefillCreateForm(string address, string? notes)
+    {
+        OpenCreate();
+        var at = address.IndexOf('@');
+        if (at > 0)
+        {
+            _formLocalPart = address[..at];
+            var domain = address[(at + 1)..].Trim().ToLowerInvariant();
+            if (_domains.Contains(domain)) _formDomain = domain;
+        }
+        else
+        {
+            _formLocalPart = address.Trim();
+        }
+        if (!string.IsNullOrWhiteSpace(notes)) _formNotes = notes;
     }
 
     private async Task ReloadAsync() => _aliases = await AliasRepo.ListAsync();
