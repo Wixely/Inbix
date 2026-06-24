@@ -40,8 +40,11 @@ public static class DependencyInjection
         services.AddSingleton<IMigrationRunner, ManifestMigrationRunner>();
 
         // Register the migration hosted service FIRST so migrations apply before any other hosted
-        // service (backup, SMTP, worker) starts — hosted services run in registration order.
+        // service (seeder, backup, SMTP, worker) starts — hosted services run in registration order.
         services.TryAddEnumerable(ServiceDescriptor.Singleton<Microsoft.Extensions.Hosting.IHostedService, MigrationHostedService>());
+
+        // Optional demo/dev data seeder (runs after migrations; no-op unless Inbix:SeedSampleData).
+        services.AddHostedService<SampleDataSeeder>();
 
         services.AddSingleton<IAliasRepository, AliasRepository>();
         services.AddSingleton<IMessageRepository, MessageRepository>();

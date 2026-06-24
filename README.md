@@ -85,6 +85,7 @@ using the `__` separator (e.g. `Inbix__Smtp__Port=2525`).
 | `Inbix:Backups:Directory` | `./data/backups` | Where backup files are written |
 | `Inbix:Backups:IntervalHours` / `RetentionCount` | `24` / `7` | Backup cadence / how many to keep |
 | `Inbix:RequireHttps` | `false` | HTTP→HTTPS redirect, HSTS, forwarded-proto, Secure cookie |
+| `Inbix:SeedSampleData` | `false` | On an empty DB, seed demo mailboxes + messages (and enable catch-all). On by default in Development |
 | `Inbix:Diagnostics:PublicIpLookupUrl` | `https://checkip.amazonaws.com` | Public-IP probe for the status page; empty to disable |
 | `Inbix:Admin:Username` | `admin` | Admin login username |
 | `Inbix:Admin:Password` | _(empty)_ | Admin password (plaintext; prefer `PasswordHash`) |

@@ -22,6 +22,12 @@ public sealed class InbixOptions
     public WorkerOptions Worker { get; set; } = new();
     public BackupOptions Backups { get; set; } = new();
     public DiagnosticsOptions Diagnostics { get; set; } = new();
+
+    /// <summary>
+    /// When true and the database has no aliases yet, populate sample mailboxes and messages on
+    /// startup (handy for demos/dev). Enables the catch-all so the sample catch-all mail is visible.
+    /// </summary>
+    public bool SeedSampleData { get; set; }
 }
 
 /// <summary>Database provider selection. SQLite is the default; an external DB can be slotted in later.</summary>
