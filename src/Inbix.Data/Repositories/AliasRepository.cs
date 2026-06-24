@@ -55,6 +55,13 @@ public sealed class AliasRepository : IAliasRepository
             new { localPart, domain, createdAt = DateTimeOffset.UtcNow, notes }).ConfigureAwait(false);
     }
 
+    public async Task DeleteAsync(long id, CancellationToken ct = default)
+    {
+        await using var c = await _factory.OpenConnectionAsync(ct).ConfigureAwait(false);
+        await c.ExecuteAsync(
+            "DELETE FROM aliases WHERE id = @id AND is_catch_all = 0;", new { id }).ConfigureAwait(false);
+    }
+
     public async Task<Alias?> UpdateAsync(long id, bool? enabled, string? notes, CancellationToken ct = default)
     {
         await using var c = await _factory.OpenConnectionAsync(ct).ConfigureAwait(false);

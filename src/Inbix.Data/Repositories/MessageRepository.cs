@@ -172,4 +172,20 @@ public sealed class MessageRepository : IMessageRepository
             "UPDATE messages SET parse_error = @error WHERE id = @messageId;",
             new { messageId, error }).ConfigureAwait(false);
     }
+
+    public async Task<int> ReassignByRecipientAsync(long fromAliasId, long toAliasId, string recipient, CancellationToken ct = default)
+    {
+        await using var c = await _factory.OpenConnectionAsync(ct).ConfigureAwait(false);
+        return await c.ExecuteAsync(
+            "UPDATE messages SET alias_id = @toAliasId WHERE alias_id = @fromAliasId AND lower(recipient) = lower(@recipient);",
+            new { fromAliasId, toAliasId, recipient }).ConfigureAwait(false);
+    }
+
+    public async Task<int> ReassignAllAsync(long fromAliasId, long toAliasId, CancellationToken ct = default)
+    {
+        await using var c = await _factory.OpenConnectionAsync(ct).ConfigureAwait(false);
+        return await c.ExecuteAsync(
+            "UPDATE messages SET alias_id = @toAliasId WHERE alias_id = @fromAliasId;",
+            new { fromAliasId, toAliasId }).ConfigureAwait(false);
+    }
 }

@@ -22,7 +22,7 @@ public static class ApiEndpoints
             await repo.GetByIdAsync(id, ct) is { } a ? Results.Ok(AliasDto.From(a)) : Results.NotFound());
 
         api.MapPost("/aliases", async (
-            CreateAliasRequest req, IAliasRepository repo, IAuditRepository audit,
+            CreateAliasRequest req, IAliasService aliasService, IAuditRepository audit,
             IOptions<InbixOptions> options, CancellationToken ct) =>
         {
             var error = AliasRules.ValidateLocalPart(req.LocalPart);
@@ -40,13 +40,27 @@ public static class ApiEndpoints
             var localPart = AliasRules.Normalize(req.LocalPart);
             try
             {
-                var created = await repo.CreateAsync(localPart, domain, req.Notes, ct);
+                var (created, migrated) = await aliasService.CreateAsync(localPart, domain, req.Notes, ct);
                 await audit.WriteAsync(new AuditEntry { Action = "alias.create", TargetType = "alias", TargetId = created.Id.ToString(), CreatedAt = DateTimeOffset.UtcNow }, ct);
-                return Results.Created($"/api/aliases/{created.Id}", AliasDto.From(created));
+                return Results.Created($"/api/aliases/{created.Id}", new { alias = AliasDto.From(created), migratedFromCatchAll = migrated });
             }
             catch (Exception ex) when (ex.Message.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase))
             {
                 return Results.Conflict($"Alias {localPart}@{domain} already exists.");
+            }
+        });
+
+        api.MapDelete("/aliases/{id:long}", async (long id, IAliasService aliasService, IAuditRepository audit, CancellationToken ct) =>
+        {
+            try
+            {
+                var movedToCatchAll = await aliasService.DeleteAsync(id, ct);
+                await audit.WriteAsync(new AuditEntry { Action = "alias.delete", TargetType = "alias", TargetId = id.ToString(), CreatedAt = DateTimeOffset.UtcNow }, ct);
+                return Results.Ok(new { movedToCatchAll });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Conflict(ex.Message);
             }
         });
 

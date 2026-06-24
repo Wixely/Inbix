@@ -33,4 +33,10 @@ public interface IMessageRepository
 
     /// <summary>Record a parse failure so the message isn't retried forever.</summary>
     Task MarkParseFailedAsync(long messageId, string error, CancellationToken ct = default);
+
+    /// <summary>Move messages addressed to a specific recipient from one alias to another (e.g. catch-all → a new alias). Returns the number moved.</summary>
+    Task<int> ReassignByRecipientAsync(long fromAliasId, long toAliasId, string recipient, CancellationToken ct = default);
+
+    /// <summary>Move all messages from one alias to another (e.g. a deleted alias → catch-all). Returns the number moved.</summary>
+    Task<int> ReassignAllAsync(long fromAliasId, long toAliasId, CancellationToken ct = default);
 }

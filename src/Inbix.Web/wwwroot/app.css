@@ -170,6 +170,18 @@ code, pre { font-family: var(--font-mono); }
 
 .btn-link { background: none; border: none; color: var(--violet); cursor: pointer; padding: 0; font: inherit; }
 .btn-link:hover { color: #a99bff; }
+.btn-link.danger { color: var(--coral); }
+.btn-link.danger:hover { color: #ff8a82; }
+
+/* Actions column: shrink to its content (Notes column absorbs the slack) and right-align. */
+.actions-col, td.row-actions { width: 1%; white-space: nowrap; }
+td.row-actions { text-align: right; }
+td.row-actions > * + * { margin-left: 0.7rem; }
+
+.flash {
+    background: var(--teal-soft); border: 1px solid rgba(45, 212, 167, 0.3); color: var(--text);
+    border-radius: var(--radius-sm); padding: 0.6rem 0.9rem; margin: 0 0 1rem; font-size: 0.9rem;
+}
 
 .btn-row { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 1.5rem; }
 

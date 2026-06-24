@@ -1,6 +1,7 @@
 @page "/aliases"
 @rendermode InteractiveServer
 @inject IAliasRepository AliasRepo
+@inject IAliasService AliasService
 @inject IAuditRepository Audit
 @inject IOptions<InbixOptions> Options
 @inject AliasChangeNotifier Notifier
@@ -15,6 +16,11 @@
     ~30&nbsp;seconds to take effect — including enabling or disabling the catch-all.
 </p>
 
+@if (_flash is not null)
+{
+    <p class="flash">@_flash</p>
+}
+
 @if (_aliases is null)
 {
     <p>Loading…</p>
@@ -23,7 +29,7 @@ else
 {
     <table class="grid">
         <thead>
-            <tr><th>Address</th><th>Status</th><th>Created</th><th>Notes</th><th></th></tr>
+            <tr><th>Address</th><th>Status</th><th>Created</th><th>Notes</th><th class="actions-col"></th></tr>
         </thead>
         <tbody>
             @if (_creating)
@@ -70,7 +76,19 @@ else
                         </td>
                         <td>@a.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
                         <td class="muted">@a.Notes</td>
-                        <td class="row-actions"><button class="btn-link" @onclick="() => OpenEdit(a)">Edit</button></td>
+                        <td class="row-actions">
+                            @if (_confirmingDeleteId == a.Id)
+                            {
+                                <span class="muted" title="Its mail moves to the catch-all.">Delete?</span>
+                                <button class="btn-link danger" @onclick="() => DeleteAsync(a)" disabled="@_busy">Yes</button>
+                                <button class="btn-link" @onclick="() => _confirmingDeleteId = null" disabled="@_busy">No</button>
+                            }
+                            else
+                            {
+                                <button class="btn-link" @onclick="() => OpenEdit(a)">Edit</button>
+                                <button class="btn-link danger" @onclick="() => _confirmingDeleteId = a.Id">Delete</button>
+                            }
+                        </td>
                     </tr>
                 }
             }
@@ -89,10 +107,12 @@ else
 
     private bool _creating;
     private long? _editingId;
+    private long? _confirmingDeleteId;
     private string _formLocalPart = string.Empty;
     private string _formDomain = string.Empty;
     private string _formNotes = string.Empty;
     private string? _error;
+    private string? _flash;
     private bool _busy;
 
     private string FormAddress => $"{_formLocalPart}@{_formDomain}";
@@ -188,8 +208,11 @@ else
                 if (string.IsNullOrWhiteSpace(_formDomain)) { _error = "No domain configured (set Inbix:Domains)."; return; }
 
                 var localPart = Inbix.Core.Validation.AliasRules.Normalize(_formLocalPart);
-                var created = await AliasRepo.CreateAsync(localPart, _formDomain, string.IsNullOrWhiteSpace(_formNotes) ? null : _formNotes);
+                var (created, migrated) = await AliasService.CreateAsync(localPart, _formDomain, string.IsNullOrWhiteSpace(_formNotes) ? null : _formNotes);
                 await Audit.WriteAsync(new AuditEntry { Action = "alias.create", TargetType = "alias", TargetId = created.Id.ToString(), Actor = "ui", CreatedAt = DateTimeOffset.UtcNow });
+                _flash = migrated > 0
+                    ? $"Created {created.Address} and moved {migrated} existing message(s) from the catch-all into it."
+                    : $"Created {created.Address}.";
             }
             else
             {
@@ -217,5 +240,22 @@ else
         await Audit.WriteAsync(new AuditEntry { Action = a.Enabled ? "alias.disable" : "alias.enable", TargetType = "alias", TargetId = a.Id.ToString(), Actor = "ui", CreatedAt = DateTimeOffset.UtcNow });
         await ReloadAsync();
         Notifier.NotifyChanged();
+    }
+
+    private async Task DeleteAsync(Alias a)
+    {
+        _busy = true;
+        try
+        {
+            var moved = await AliasService.DeleteAsync(a.Id);
+            await Audit.WriteAsync(new AuditEntry { Action = "alias.delete", TargetType = "alias", TargetId = a.Id.ToString(), Actor = "ui", CreatedAt = DateTimeOffset.UtcNow });
+            _confirmingDeleteId = null;
+            _flash = moved > 0
+                ? $"Deleted {a.Address} and moved {moved} message(s) to the catch-all."
+                : $"Deleted {a.Address}.";
+            await ReloadAsync();
+            Notifier.NotifyChanged();
+        }
+        finally { _busy = false; }
     }
 }

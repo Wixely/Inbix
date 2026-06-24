@@ -47,6 +47,7 @@ public static class DependencyInjection
         services.AddHostedService<SampleDataSeeder>();
 
         services.AddSingleton<IAliasRepository, AliasRepository>();
+        services.AddSingleton<IAliasService, AliasService>();
         services.AddSingleton<IMessageRepository, MessageRepository>();
         services.AddSingleton<ISmtpSessionRepository, SmtpSessionRepository>();
         services.AddSingleton<IAuditRepository, AuditRepository>();
