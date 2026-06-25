@@ -6,7 +6,7 @@
     <a href="status" class="foot-status @StatusCss" title="@StatusTitle">
         <span class="dot-status">&#9679;</span> @StatusLabel
     </a>
-    <span class="foot-version">Inbix v@(Version)</span>
+    <a class="foot-version" href="https://github.com/Wixely/Inbix" target="_blank" rel="noopener noreferrer">Inbix v@(Version)</a>
 </div>
 
 @code {
@@ -22,7 +22,7 @@
     {
         DiagnosticStatus.Ok => "Healthy",
         DiagnosticStatus.Warning => "Warnings",
-        DiagnosticStatus.Error => "Issues",
+        DiagnosticStatus.Error => "Status: Unhealthy",
         _ => "Checking"
     };
 

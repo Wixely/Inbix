@@ -1,10 +1,10 @@
 @* A single message card for the dashboard / inbox lists. *@
-<button type="button" class="mail-card @(Active ? "active" : "")" @onclick="OnClick">
+<button type="button" class="mail-card @(Active ? "active" : "")" style="@CardStyle" @onclick="OnClick">
     <div class="mail-card-row">
         <span class="mail-from">@(string.IsNullOrWhiteSpace(Sender) ? "(unknown sender)" : Sender)</span>
         @if (!string.IsNullOrEmpty(Chip))
         {
-            <span class="chip">@Chip</span>
+            <span class="chip" style="@ChipStyle">@Chip</span>
         }
     </div>
     <div class="mail-subject">
@@ -26,6 +26,18 @@
     /// <summary>Optional pill (mailbox label on the dashboard; recipient for a catch-all inbox).</summary>
     [Parameter] public string? Chip { get; set; }
 
+    /// <summary>Optional accent colour (hex) for the chip and the card's left bar; falls back to the theme.</summary>
+    [Parameter] public string? ChipColor { get; set; }
+
     [Parameter] public bool Active { get; set; }
     [Parameter] public EventCallback OnClick { get; set; }
+
+    // Feeds the left accent bar (see .mail-card in app.css) via a CSS custom property.
+    private string? CardStyle =>
+        string.IsNullOrWhiteSpace(ChipColor) ? null : $"--accent-mail: {ChipColor}";
+
+    // 8-digit hex (#rrggbbaa) tints the chip background/border from the same accent colour.
+    private string? ChipStyle =>
+        string.IsNullOrWhiteSpace(ChipColor) ? null
+        : $"color: {ChipColor}; background: {ChipColor}24; border-color: {ChipColor}4d;";
 }

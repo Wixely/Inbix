@@ -29,8 +29,8 @@ else
                 @foreach (var m in _items)
                 {
                     <MailCard Sender="@m.Sender" Subject="@m.Subject" ReceivedAt="@m.ReceivedAt" Parsed="@m.Parsed"
-                              Chip="@(_alias.IsCatchAll ? m.Recipient : null)" Active="@(m.Id == _selectedId)"
-                              OnClick="@(() => _selectedId = m.Id)" />
+                              Chip="@(_alias.IsCatchAll ? m.Recipient : null)" ChipColor="@_alias.Color"
+                              Active="@(m.Id == _selectedId)" OnClick="@(() => _selectedId = m.Id)" />
                 }
             }
         </List>

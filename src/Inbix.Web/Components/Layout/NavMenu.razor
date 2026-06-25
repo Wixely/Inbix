@@ -8,7 +8,7 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /></svg>
         Dashboard
     </NavLink>
-    <NavLink class="nav-item" href="aliases">
+    <NavLink class="nav-item" href="aliases" Match="NavLinkMatch.All">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4" /><path d="M16 12v1.5a2.5 2.5 0 0 0 5 0V12a9 9 0 1 0-3.5 7.1" /></svg>
         Aliases
     </NavLink>
@@ -37,7 +37,8 @@
                 @foreach (var box in _inboxes)
                 {
                     <NavLink class="nav-subitem" href="@($"aliases/{box.Id}/inbox")">
-                        @(box.IsCatchAll ? "Catch-all" : box.Address)
+                        <span class="nav-dot" style="background:@box.Color"></span>
+                        <span class="nav-subitem-label">@(box.IsCatchAll ? "Catch-all" : box.Address)</span>
                     </NavLink>
                 }
             }

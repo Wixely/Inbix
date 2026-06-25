@@ -42,7 +42,7 @@
             @foreach (var m in _recent)
             {
                 <MailCard Sender="@m.Sender" Subject="@m.Subject" ReceivedAt="@m.ReceivedAt" Parsed="@m.Parsed"
-                          Chip="@m.MailboxLabel" Active="@(m.Id == _selectedId)" OnClick="@(() => SelectManual(m.Id))" />
+                          Chip="@m.MailboxLabel" ChipColor="@m.AliasColor" Active="@(m.Id == _selectedId)" OnClick="@(() => SelectManual(m.Id))" />
             }
         }
     </List>

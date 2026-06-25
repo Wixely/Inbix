@@ -41,7 +41,7 @@ else
             {
                 <tr class="catchall-row">
                     <td>
-                        <a href="@($"aliases/{ca.Id}/inbox")">Catch-all</a>
+                        @ColorPicker(ca)<a href="@($"aliases/{ca.Id}/inbox")">Catch-all</a>
                         <div class="muted catchall-hint">Stores mail for any address on your domains</div>
                     </td>
                     <td>
@@ -66,7 +66,7 @@ else
                 else
                 {
                     <tr>
-                        <td><a href="@($"aliases/{a.Id}/inbox")">@a.Address</a></td>
+                        <td>@ColorPicker(a)<a href="@($"aliases/{a.Id}/inbox")">@a.Address</a></td>
                         <td>
                             <label class="switch" title="@(a.Enabled ? "Click to disable" : "Click to enable")">
                                 <input type="checkbox" checked="@a.Enabled" @onchange="() => ToggleAsync(a)" />
@@ -112,6 +112,16 @@ else
     private bool _creating;
     private long? _editingId;
     private long? _confirmingDeleteId;
+    private long? _pickerForId;
+
+    // 24-colour accent palette; the first entry (violet) is the default applied to new aliases.
+    private static readonly string[] Palette =
+    [
+        "#8b7cf6", "#6c5ce7", "#5b8def", "#3aa0ff", "#00b8d4", "#2dd4a7",
+        "#26c281", "#4cd137", "#a3cb38", "#f5b73d", "#f0932b", "#f06860",
+        "#eb4d4b", "#e84393", "#fd79a8", "#c56cf0", "#9b59b6", "#7f8fa6",
+        "#b2bec3", "#ff7675", "#ffd56b", "#55efc4", "#74b9ff", "#dfe6e9"
+    ];
     private string _formLocalPart = string.Empty;
     private string _formDomain = string.Empty;
     private string _formNotes = string.Empty;
@@ -160,6 +170,36 @@ else
             }
         </td>
     </tr>;
+
+    // Colour swatch + popover palette, shared by the catch-all and regular alias rows.
+    private RenderFragment ColorPicker(Alias a) => @<span class="color-cell">
+        <button type="button" class="color-swatch" style="background:@a.Color"
+                title="Change colour" @onclick="() => TogglePicker(a.Id)"></button>
+        @if (_pickerForId == a.Id)
+        {
+            <div class="color-popover">
+                @foreach (var c in Palette)
+                {
+                    <button type="button" title="@c" style="background:@c"
+                            class="color-opt @(string.Equals(c, a.Color, StringComparison.OrdinalIgnoreCase) ? "sel" : "")"
+                            @onclick="() => SetColorAsync(a, c)"></button>
+                }
+            </div>
+        }
+    </span>;
+
+    private void TogglePicker(long id) => _pickerForId = _pickerForId == id ? null : id;
+
+    private async Task SetColorAsync(Alias a, string color)
+    {
+        _pickerForId = null;
+        if (string.Equals(a.Color, color, StringComparison.OrdinalIgnoreCase))
+            return;
+        await AliasRepo.UpdateColorAsync(a.Id, color);
+        await Audit.WriteAsync(new AuditEntry { Action = "alias.color", TargetType = "alias", TargetId = a.Id.ToString(), Actor = "ui", CreatedAt = DateTimeOffset.UtcNow });
+        await ReloadAsync();
+        Notifier.NotifyChanged();
+    }
 
     protected override async Task OnInitializedAsync()
     {

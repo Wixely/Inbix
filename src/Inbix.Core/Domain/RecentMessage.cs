@@ -21,6 +21,9 @@ public sealed class RecentMessage
     public string AliasDomain { get; set; } = string.Empty;
     public bool AliasIsCatchAll { get; set; }
 
+    /// <summary>Accent colour (hex) of the owning alias, used to tint the mailbox chip.</summary>
+    public string AliasColor { get; set; } = "#8b7cf6";
+
     /// <summary>Human label for the mailbox this message landed in.</summary>
     public string MailboxLabel => AliasIsCatchAll ? "Catch-all" : $"{AliasLocalPart}@{AliasDomain}";
 }

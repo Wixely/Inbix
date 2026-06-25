@@ -20,6 +20,9 @@ public interface IAliasRepository
     /// <summary>Enable/disable an alias and/or update notes. Returns the updated row, or null if missing.</summary>
     Task<Alias?> UpdateAsync(long id, bool? enabled, string? notes, CancellationToken ct = default);
 
+    /// <summary>Set an alias's accent colour (hex). Returns the updated row, or null if missing.</summary>
+    Task<Alias?> UpdateColorAsync(long id, string color, CancellationToken ct = default);
+
     /// <summary>Delete an alias (no-op for the catch-all). Callers should reassign its messages first.</summary>
     Task DeleteAsync(long id, CancellationToken ct = default);
 }

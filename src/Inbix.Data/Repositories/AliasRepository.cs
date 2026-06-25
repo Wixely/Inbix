@@ -7,7 +7,7 @@ namespace Inbix.Data.Repositories;
 public sealed class AliasRepository : IAliasRepository
 {
     private const string Columns =
-        "id, local_part, domain, enabled, created_at, disabled_at, notes, is_catch_all";
+        "id, local_part, domain, enabled, created_at, disabled_at, notes, is_catch_all, color";
 
     private readonly IDbConnectionFactory _factory;
 
@@ -53,6 +53,14 @@ public sealed class AliasRepository : IAliasRepository
              RETURNING {Columns};
              """,
             new { localPart, domain, createdAt = DateTimeOffset.UtcNow, notes }).ConfigureAwait(false);
+    }
+
+    public async Task<Alias?> UpdateColorAsync(long id, string color, CancellationToken ct = default)
+    {
+        await using var c = await _factory.OpenConnectionAsync(ct).ConfigureAwait(false);
+        return await c.QuerySingleOrDefaultAsync<Alias>(
+            $"UPDATE aliases SET color = @color WHERE id = @id RETURNING {Columns};",
+            new { id, color }).ConfigureAwait(false);
     }
 
     public async Task DeleteAsync(long id, CancellationToken ct = default)

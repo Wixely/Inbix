@@ -14,5 +14,8 @@ public sealed class Alias
     /// <summary>True for the single permanent catch-all record (stores mail for unmatched recipients).</summary>
     public bool IsCatchAll { get; set; }
 
+    /// <summary>Accent colour (hex) for the sidebar inbox list and dashboard chips. Defaults to violet.</summary>
+    public string Color { get; set; } = "#8b7cf6";
+
     public string Address => $"{LocalPart}@{Domain}";
 }

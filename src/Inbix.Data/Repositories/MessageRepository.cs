@@ -72,7 +72,8 @@ public sealed class MessageRepository : IMessageRepository
             """
             SELECT m.id, m.alias_id, m.sender, m.subject, m.recipient, m.received_at, m.size_bytes, m.parsed,
                    substr(b.text_body, 1, 200) AS snippet,
-                   a.local_part AS alias_local_part, a.domain AS alias_domain, a.is_catch_all AS alias_is_catch_all
+                   a.local_part AS alias_local_part, a.domain AS alias_domain, a.is_catch_all AS alias_is_catch_all,
+                   a.color AS alias_color
             FROM messages m
             JOIN aliases a ON a.id = m.alias_id
             LEFT JOIN message_bodies b ON b.message_id = m.id

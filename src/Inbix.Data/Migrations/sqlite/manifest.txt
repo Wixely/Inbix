@@ -1,2 +1,3 @@
 001_init.sql
 002_catchall.sql
+003_alias_color.sql
