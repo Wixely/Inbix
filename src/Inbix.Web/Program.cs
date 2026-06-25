@@ -146,7 +146,10 @@ if (requireHttps)
 if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 
-app.UseStaticFiles();
+// Serve static assets (incl. Blazor's _framework/*) from the published static-web-assets manifest
+// rather than loose files, so framework JS resolves in the container too. AllowAnonymous keeps them
+// reachable when the admin fallback auth policy is active.
+app.MapStaticAssets().AllowAnonymous();
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseMiddleware<ApiKeyMiddleware>();
