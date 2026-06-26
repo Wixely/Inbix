@@ -223,6 +223,20 @@ and restarting Inbix.
 - Monitor `/health/ready` from an external uptime checker so you find out before your senders do.
 - Watch the **Audit log** page for alias changes and backup events.
 
+**Storage on a network filesystem (NFS/SMB)**
+- SQLite is happiest on **local disk**. Its default WAL mode needs a shared-memory (`-shm`) file, which
+  NFS/SMB cannot provide — the database then fails to open with *"unable to open database file"* (error
+  14) and *"locking protocol"* (error 15), typically the first time something writes (e.g. mail arrives).
+- **Preferred fix:** keep the live database on a **local** volume and point backups at the share
+  (`Inbix__Backups__Directory`). You get the NAS for durability without running the live DB on it.
+- **If `/data` must be on the share**, set `Inbix__Database__ExclusiveLocking=true`. SQLite then keeps
+  the WAL index in heap memory (no `-shm` needed) and routes all access through a single connection — so
+  it works over NFS/SMB, trading write concurrency for compatibility (fine for Inbix's low write volume).
+  The share must support file **locking** (NFSv4, or NFSv3 with `lockd`/`statd`; **not** mounted
+  `nolock`) and should be a **`hard`** mount. Switching off WAL with `Inbix__Database__JournalMode=DELETE`
+  is an alternative that relies only on POSIX locks. When changing modes, stop the container cleanly and
+  remove any stale `inbix.db-wal`/`inbix.db-shm` files once.
+
 **Workflow**
 - Start with the **catch-all enabled** while you learn what arrives, then create real aliases for the
   senders worth keeping. Deleting an alias moves its mail back to the catch-all (nothing is lost).
@@ -238,6 +252,7 @@ and restarting Inbix.
 | Mail bounces with "relay denied" / `550` | Recipient isn't a known enabled alias and the catch-all is off. |
 | Senders connect but mail vanishes | MX A-record proxied through Cloudflare — switch it to DNS-only. |
 | Logged out on every restart | DataProtection keys not persisted — set `Inbix__DataProtectionKeysPath`. |
+| SQLite "unable to open database file" (14) / "locking protocol" (15) | `/data` is on a network filesystem (NFS/SMB). Move the DB to local disk, or set `Inbix__Database__ExclusiveLocking=true` — see [§8 Storage](#8-suggestions--tips). |
 | UI/API needs no login | No admin password configured — set `Inbix__Admin__Password`/`PasswordHash`. |
 | Status page: "MX does not resolve to this IP" | MX host's A record points elsewhere, or your public IP changed (update DDNS). |
 
