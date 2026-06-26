@@ -6,6 +6,7 @@
 @inject IIdentityService IdentityService
 @inject IIdentityGenerator Generator
 @inject IAliasRepository AliasRepo
+@inject ISettingsRepository Settings
 
 <div class="page-head">
     <h1>Identities</h1>
@@ -23,20 +24,18 @@
 }
 
 <div class="panel id-generator">
-    <div class="id-gen-row">
-        <span class="muted">Randomise from</span>
-        <label class="switch">
-            <input type="checkbox" @bind="_includeUk" />
-            <span class="slider"></span>
-            <span class="switch-label">UK</span>
-        </label>
-        <label class="switch">
-            <input type="checkbox" @bind="_includeUs" />
-            <span class="slider"></span>
-            <span class="switch-label">US</span>
-        </label>
-        <button class="btn btn-primary" @onclick="GenerateDraft" disabled="@_busy">Generate identity</button>
+    <span class="muted id-gen-label">Randomise from</span>
+    <div class="id-gen-regions">
+        @foreach (var (cc, name) in Countries.All)
+        {
+            <label class="switch" title="@name">
+                <input type="checkbox" checked="@_regions.Contains(cc)" @onchange="() => ToggleRegionAsync(cc)" />
+                <span class="slider"></span>
+                <span class="switch-label">@cc.ToUpperInvariant()</span>
+            </label>
+        }
     </div>
+    <button class="btn btn-primary" @onclick="GenerateDraft" disabled="@(_busy || _regions.Count == 0)">Generate identity</button>
 </div>
 
 @if (_showForm)
@@ -79,8 +78,10 @@
 
             <label class="id-field"><span>Region</span>
                 <select class="input" @bind="_draft.Country">
-                    <option value="uk">United Kingdom</option>
-                    <option value="us">United States</option>
+                    @foreach (var (cc, name) in Countries.All)
+                    {
+                        <option value="@cc">@name</option>
+                    }
                 </select>
             </label>
 
@@ -169,14 +170,34 @@ else if (_identities.Count > 0)
     private long? _expandedId;
     private long? _confirmingDeleteId;
 
-    private bool _includeUk = true;
-    private bool _includeUs = true;
+    private HashSet<string> _regions = [];
     private bool _revealPw;
     private bool _busy;
     private string? _error;
     private string? _flash;
 
-    protected override async Task OnInitializedAsync() => await ReloadAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        await ReloadAsync();
+        _regions = await LoadRegionsAsync();
+    }
+
+    private async Task<HashSet<string>> LoadRegionsAsync()
+    {
+        var saved = await Settings.GetAsync(SettingKeys.IdentityRegions);
+        var codes = string.IsNullOrWhiteSpace(saved)
+            ? Countries.DefaultCodes
+            : saved.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var set = codes.Where(Countries.IsSupported).ToHashSet();
+        return set.Count == 0 ? Countries.DefaultCodes.ToHashSet() : set;
+    }
+
+    private async Task ToggleRegionAsync(string code)
+    {
+        if (!_regions.Remove(code)) _regions.Add(code);
+        var csv = string.Join(",", Countries.All.Select(c => c.Code).Where(_regions.Contains));
+        await Settings.SetAsync(SettingKeys.IdentityRegions, csv);
+    }
 
     private async Task ReloadAsync()
     {
@@ -193,8 +214,8 @@ else if (_identities.Count > 0)
 
     private void GenerateDraft()
     {
-        if (!_includeUk && !_includeUs) { _includeUk = true; _includeUs = true; }
-        _draft = Generator.Generate(new GenerateOptions { IncludeUk = _includeUk, IncludeUs = _includeUs });
+        if (_regions.Count == 0) return;
+        _draft = Generator.Generate(new GenerateOptions { Countries = _regions.ToList() });
         _editingId = null;
         _showForm = true;
         _revealPw = false;

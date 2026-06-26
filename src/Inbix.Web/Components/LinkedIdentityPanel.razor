@@ -5,6 +5,7 @@
 @inject IIdentityRepository IdentityRepo
 @inject IIdentityService IdentityService
 @inject IIdentityGenerator Generator
+@inject ISettingsRepository Settings
 
 <div class="panel identity-panel">
     <div class="identity-panel-head">
@@ -82,11 +83,22 @@
         _busy = true;
         try
         {
-            var created = await IdentityService.CreateAsync(Generator.Generate(new Inbix.Core.Identities.GenerateOptions()));
+            var options = new Inbix.Core.Identities.GenerateOptions { Countries = await LoadRegionsAsync() };
+            var created = await IdentityService.CreateAsync(Generator.Generate(options));
             await IdentityService.LinkAliasAsync(AliasId, created.Id);
             _identity = created;
         }
         finally { _busy = false; }
+    }
+
+    // Honour the region preference saved on the Identities page.
+    private async Task<List<string>> LoadRegionsAsync()
+    {
+        var saved = await Settings.GetAsync(SettingKeys.IdentityRegions);
+        if (string.IsNullOrWhiteSpace(saved)) return Inbix.Core.Identities.Countries.DefaultCodes.ToList();
+        var codes = saved.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(Inbix.Core.Identities.Countries.IsSupported).ToList();
+        return codes.Count == 0 ? Inbix.Core.Identities.Countries.DefaultCodes.ToList() : codes;
     }
 
     private async Task LinkExistingAsync()

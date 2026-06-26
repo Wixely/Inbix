@@ -16,4 +16,7 @@ public interface ISettingsRepository
 public static class SettingKeys
 {
     public const string ShowJunkInbox = "junk.show_in_sidebar";
+
+    /// <summary>CSV of enabled identity-generator country codes (e.g. "us,uk").</summary>
+    public const string IdentityRegions = "identity.regions";
 }

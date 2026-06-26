@@ -1,8 +1,10 @@
 namespace Inbix.Core.Identities;
 
-/// <summary>Which regional pools the generator may draw from. At least one should be enabled.</summary>
+/// <summary>
+/// Which country pools the generator may draw from (by code, e.g. "us", "uk", "au"). Null or empty
+/// falls back to <see cref="Countries.DefaultCodes"/>.
+/// </summary>
 public sealed class GenerateOptions
 {
-    public bool IncludeUk { get; set; } = true;
-    public bool IncludeUs { get; set; } = true;
+    public IReadOnlyList<string>? Countries { get; set; }
 }

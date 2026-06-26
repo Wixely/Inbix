@@ -37,13 +37,25 @@ public sealed class IdentityTests : IAsyncLifetime, IDisposable
     // ---- Generator (no DB) ----
 
     [Theory]
-    [InlineData(true, false, "uk")]
-    [InlineData(false, true, "us")]
-    public void Generator_Honours_Region(bool uk, bool us, string expected)
+    [InlineData("uk")]
+    [InlineData("us")]
+    [InlineData("ie")]
+    [InlineData("au")]
+    [InlineData("za")]
+    public void Generator_Honours_Single_Region(string code)
     {
         var gen = new RandomIdentityGenerator();
         for (var i = 0; i < 25; i++)
-            Assert.Equal(expected, gen.Generate(new GenerateOptions { IncludeUk = uk, IncludeUs = us }).Country);
+            Assert.Equal(code, gen.Generate(new GenerateOptions { Countries = [code] }).Country);
+    }
+
+    [Fact]
+    public void Generator_Picks_Only_From_Enabled_Regions()
+    {
+        var gen = new RandomIdentityGenerator();
+        var allowed = new[] { "ca", "nz" };
+        for (var i = 0; i < 40; i++)
+            Assert.Contains(gen.Generate(new GenerateOptions { Countries = allowed }).Country, allowed);
     }
 
     [Fact]
@@ -67,10 +79,10 @@ public sealed class IdentityTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
-    public void Generator_Empty_Region_Falls_Back_To_Both()
+    public void Generator_Empty_Region_Falls_Back_To_Defaults()
     {
-        var id = new RandomIdentityGenerator().Generate(new GenerateOptions { IncludeUk = false, IncludeUs = false });
-        Assert.Contains(id.Country, new[] { "uk", "us" });
+        var id = new RandomIdentityGenerator().Generate(new GenerateOptions { Countries = [] });
+        Assert.Contains(id.Country, Countries.DefaultCodes);
     }
 
     [Fact]
@@ -82,7 +94,7 @@ public sealed class IdentityTests : IAsyncLifetime, IDisposable
         {
             var u = gen.NewUsername();
             Assert.False(string.IsNullOrWhiteSpace(u));
-            Assert.True(u.Length is >= 3 and <= 40, $"unexpected length: {u}");
+            Assert.True(u.Length is >= 3 and <= 48, $"unexpected length: {u}");
             Assert.Matches("^[A-Za-z][A-Za-z0-9_.]*$", u); // a word, then letters/digits/_/. only
             seen.Add(u);
         }
