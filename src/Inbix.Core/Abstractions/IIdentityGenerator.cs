@@ -12,6 +12,6 @@ public interface IIdentityGenerator
     /// <summary>A fresh strong password (for per-field "regenerate" in the editor).</summary>
     string NewPassword();
 
-    /// <summary>A fresh username derived from a name (for per-field "regenerate").</summary>
-    string NewUsername(string firstName, string lastName);
+    /// <summary>A fresh dictionary-word username, e.g. <c>golden_chase92</c> (for per-field "regenerate").</summary>
+    string NewUsername();
 }
