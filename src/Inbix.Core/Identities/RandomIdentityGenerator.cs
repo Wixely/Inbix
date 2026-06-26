@@ -36,7 +36,7 @@ public sealed class RandomIdentityGenerator : IIdentityGenerator
             Title = male ? "Mr" : Pick(["Ms", "Mrs", "Miss"]),
             FirstName = first,
             LastName = last,
-            Username = RandomUsername(first, last),
+            Username = UsernameGenerator.Generate(),
             Password = RandomPassword(),
             DateOfBirth = RandomDateOfBirth(),
             Phone = RandomPhone(country),
@@ -51,12 +51,7 @@ public sealed class RandomIdentityGenerator : IIdentityGenerator
 
     public string NewPassword() => RandomPassword();
 
-    public string NewUsername(string firstName, string lastName)
-    {
-        var first = string.IsNullOrWhiteSpace(firstName) ? "user" : firstName.Trim();
-        var last = string.IsNullOrWhiteSpace(lastName) ? "name" : lastName.Trim();
-        return RandomUsername(first, last);
-    }
+    public string NewUsername() => UsernameGenerator.Generate();
 
     private static T Pick<T>(IReadOnlyList<T> items) => items[Random.Shared.Next(items.Count)];
 
@@ -94,22 +89,6 @@ public sealed class RandomIdentityGenerator : IIdentityGenerator
             return $"+44 7{Random.Shared.Next(100, 1000)} {Random.Shared.Next(100000, 1000000)}";
         // US: +1 (NXX) NXX-XXXX
         return $"+1 ({Random.Shared.Next(200, 1000)}) {Random.Shared.Next(200, 1000)}-{Random.Shared.Next(0, 10000):D4}";
-    }
-
-    private static string RandomUsername(string first, string last)
-    {
-        var f = first.ToLowerInvariant();
-        var l = last.ToLowerInvariant();
-        var num = Random.Shared.Next(0, 100);
-        return Random.Shared.Next(6) switch
-        {
-            0 => $"{f}.{l}",
-            1 => $"{f[..1]}{l}",
-            2 => $"{f}{l}{num}",
-            3 => $"{f}_{l}",
-            4 => $"{l}{f[..1]}{num}",
-            _ => $"{f}{num}"
-        };
     }
 
     private static string RandomPassword()

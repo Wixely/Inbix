@@ -73,6 +73,22 @@ public sealed class IdentityTests : IAsyncLifetime, IDisposable
         Assert.Contains(id.Country, new[] { "uk", "us" });
     }
 
+    [Fact]
+    public void Usernames_Are_Dictionary_Word_Based_And_Varied()
+    {
+        var gen = new RandomIdentityGenerator();
+        var seen = new HashSet<string>();
+        for (var i = 0; i < 60; i++)
+        {
+            var u = gen.NewUsername();
+            Assert.False(string.IsNullOrWhiteSpace(u));
+            Assert.True(u.Length is >= 3 and <= 40, $"unexpected length: {u}");
+            Assert.Matches("^[A-Za-z][A-Za-z0-9_.]*$", u); // a word, then letters/digits/_/. only
+            seen.Add(u);
+        }
+        Assert.True(seen.Count >= 30, $"expected variety, got {seen.Count} unique"); // combinatorial mix
+    }
+
     // ---- Repository / service ----
 
     [Fact]

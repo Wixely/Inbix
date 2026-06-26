@@ -201,7 +201,7 @@ else if (_identities.Count > 0)
         _error = null;
     }
 
-    private void RegenUsername() => _draft.Username = Generator.NewUsername(_draft.FirstName, _draft.LastName);
+    private void RegenUsername() => _draft.Username = Generator.NewUsername();
 
     private void RegenPassword() => _draft.Password = Generator.NewPassword();
 

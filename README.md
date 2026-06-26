@@ -219,7 +219,8 @@ The same daily job that prunes Junk (`Inbix:Junk:CleanupIntervalHours`) applies 
 The **Identities** page (`/identities`) generates believable, **offline** sign-up identities (no
 external service) so you have consistent fake details for each registration — and can retrieve them
 later. Tick **UK** and/or **US** to choose which pools to randomise from, then **Generate**: full name,
-username, strong password, full address, adult date of birth, phone, and a security question/answer.
+a dictionary-word username (e.g. `golden_chase92`), a strong password, full address, adult date of
+birth, phone, and a security question/answer.
 Edit any field (with per-field re-roll for username/password) and **Save**.
 
 Linking is done from an **alias's inbox** (the "Identity" panel): generate-and-link a fresh identity or
