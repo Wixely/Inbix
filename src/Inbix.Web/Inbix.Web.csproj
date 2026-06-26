@@ -2,6 +2,11 @@
   <PropertyGroup>
     <RootNamespace>Inbix.Web</RootNamespace>
     <UserSecretsId>inbix-web</UserSecretsId>
+    <!-- .NET 10: blazor.web.js ships as a static web asset from the Microsoft.AspNetCore.App.Internal.Assets
+         pack (no longer embedded in the shared framework). Force it so _framework/* is materialized into the
+         publish/Docker output; otherwise a restore-then-publish-with-no-restore build omits it and the
+         container 404s /_framework/blazor.web.js. See dotnet/aspnetcore #63962, #65353. -->
+    <RequiresAspNetWebAssets>true</RequiresAspNetWebAssets>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />

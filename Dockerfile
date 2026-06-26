@@ -13,9 +13,18 @@ COPY src/Inbix.Worker/Inbix.Worker.csproj src/Inbix.Worker/
 COPY src/Inbix.Web/Inbix.Web.csproj src/Inbix.Web/
 RUN dotnet restore src/Inbix.Web/Inbix.Web.csproj
 
-# Copy the rest of the sources and publish.
+# Copy the rest of the sources and publish. NOTE: do NOT pass --no-restore here. On .NET 10,
+# blazor.web.js is a static web asset from the Microsoft.AspNetCore.App.Internal.Assets pack;
+# a restore-then-publish-with-no-restore build can omit it (dotnet/aspnetcore #63962), leaving the
+# image without /wwwroot/_framework/blazor.web.js so MapStaticAssets 404s it. Letting publish restore
+# resolves the pack reliably (the earlier layer restore keeps this fast).
 COPY src/ src/
-RUN dotnet publish src/Inbix.Web/Inbix.Web.csproj -c Release -o /app --no-restore
+RUN dotnet publish src/Inbix.Web/Inbix.Web.csproj -c Release -o /app
+
+# Fail the build if the Blazor framework assets were not materialized into the publish output,
+# so a broken image (missing _framework/blazor.web.js) can never be shipped.
+RUN test -f /app/Inbix.Web.staticwebassets.endpoints.json && test -f /app/wwwroot/_framework/blazor.web.js \
+    || (echo "ERROR: published _framework static assets are missing (blazor.web.js)" && ls -R /app/wwwroot 2>/dev/null | head -50; exit 1)
 
 # ---- Runtime stage ----
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
