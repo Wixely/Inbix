@@ -646,8 +646,10 @@ select.input { cursor: pointer; }
 
 /* ---------- Identities ---------- */
 
-.id-generator { margin-bottom: 1rem; }
-.id-gen-row { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.id-generator { margin-bottom: 1rem; display: flex; flex-direction: column; gap: 0.85rem; align-items: flex-start; }
+.id-gen-label { font-size: 0.78rem; }
+.id-gen-regions { display: flex; flex-wrap: wrap; gap: 0.55rem 1.25rem; width: 100%; }
+.id-gen-regions .switch { min-width: 6rem; }
 
 .id-form { margin-bottom: 1rem; }
 .id-form-head, .identity-panel-head {

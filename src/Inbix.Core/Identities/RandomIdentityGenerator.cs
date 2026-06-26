@@ -6,32 +6,26 @@ using Inbix.Core.Domain;
 namespace Inbix.Core.Identities;
 
 /// <summary>
-/// Offline identity generator — draws from embedded curated UK/US data pools (no external service, in
-/// keeping with Inbix never calling out). Produces believable registration details: name, username,
+/// Offline identity generator — draws from embedded curated pools (no external service, in keeping with
+/// Inbix never calling out). Names and streets are shared across the supported English-language
+/// countries; each country (see <see cref="Countries"/>) supplies its own cities/regions, phone format
+/// and postcode format. Produces believable registration details: name, dictionary-word username,
 /// strong password, address, adult date of birth, region-appropriate phone, and a security Q&amp;A.
 /// </summary>
 public sealed class RandomIdentityGenerator : IIdentityGenerator
 {
     public Identity Generate(GenerateOptions options)
     {
-        var useUk = options.IncludeUk;
-        var useUs = options.IncludeUs;
-        if (!useUk && !useUs) { useUk = true; useUs = true; } // never generate from an empty pool
-
-        var country = (useUk && useUs)
-            ? (Random.Shared.Next(2) == 0 ? "uk" : "us")
-            : (useUk ? "uk" : "us");
-
-        var data = country == "uk" ? Uk : Us;
+        var country = PickCountry(options);
         var male = Random.Shared.Next(2) == 0;
-        var first = Pick(male ? data.MaleFirst : data.FemaleFirst);
-        var last = Pick(data.Surnames);
-        var (street, city, region, postcode) = RandomAddress(country, data);
-        var (question, answer) = RandomSecurity(data);
+        var first = Pick(male ? MaleFirst : FemaleFirst);
+        var last = Pick(Surnames);
+        var (city, region) = Pick(country.Cities);
+        var (question, answer) = RandomSecurity(country.Cities);
 
         return new Identity
         {
-            Country = country,
+            Country = country.Code,
             Gender = male ? "male" : "female",
             Title = male ? "Mr" : Pick(["Ms", "Mrs", "Miss"]),
             FirstName = first,
@@ -39,11 +33,11 @@ public sealed class RandomIdentityGenerator : IIdentityGenerator
             Username = UsernameGenerator.Generate(),
             Password = RandomPassword(),
             DateOfBirth = RandomDateOfBirth(),
-            Phone = RandomPhone(country),
-            Street = street,
+            Phone = RandomPhone(country.Code),
+            Street = $"{Random.Shared.Next(1, 250)} {Pick(StreetNames)} {Pick(StreetTypes)}",
             City = city,
             StateCounty = region,
-            Postcode = postcode,
+            Postcode = RandomPostcode(country.Code),
             SecurityQuestion = question,
             SecurityAnswer = answer,
         };
@@ -52,6 +46,21 @@ public sealed class RandomIdentityGenerator : IIdentityGenerator
     public string NewPassword() => RandomPassword();
 
     public string NewUsername() => UsernameGenerator.Generate();
+
+    private static Country PickCountry(GenerateOptions options)
+    {
+        var enabled = (options.Countries ?? [])
+            .Select(c => c?.Trim().ToLowerInvariant())
+            .Where(c => !string.IsNullOrEmpty(c) && CountriesByCode.ContainsKey(c!))
+            .Select(c => c!)
+            .Distinct()
+            .ToList();
+
+        if (enabled.Count == 0)
+            enabled = Countries.DefaultCodes.Where(CountriesByCode.ContainsKey).ToList();
+
+        return CountriesByCode[enabled[Random.Shared.Next(enabled.Count)]];
+    }
 
     private static T Pick<T>(IReadOnlyList<T> items) => items[Random.Shared.Next(items.Count)];
 
@@ -62,34 +71,41 @@ public sealed class RandomIdentityGenerator : IIdentityGenerator
         return today.AddYears(-age).AddDays(-Random.Shared.Next(0, 365));
     }
 
-    private static (string street, string city, string region, string postcode) RandomAddress(string country, LocaleData d)
+    // ---- Region-specific formats ---------------------------------------------------------------
+
+    private static string RandomPhone(string code) => code switch
     {
-        var street = $"{Random.Shared.Next(1, 250)} {Pick(d.StreetNames)} {Pick(d.StreetTypes)}";
-        var (city, region) = Pick(d.Cities);
-        var postcode = country == "uk" ? UkPostcode() : UsZip();
-        return (street, city, region, postcode);
-    }
+        "uk" => $"+44 7{Random.Shared.Next(100, 1000)} {Random.Shared.Next(100000, 1000000)}",
+        "ie" => $"+353 8{Random.Shared.Next(0, 10)} {Random.Shared.Next(100, 1000)} {Random.Shared.Next(1000, 10000)}",
+        "au" => $"+61 4{Random.Shared.Next(10, 100)} {Random.Shared.Next(100, 1000)} {Random.Shared.Next(100, 1000)}",
+        "nz" => $"+64 2{Random.Shared.Next(0, 10)} {Random.Shared.Next(100, 1000)} {Random.Shared.Next(1000, 10000)}",
+        "za" => $"+27 8{Random.Shared.Next(0, 10)} {Random.Shared.Next(100, 1000)} {Random.Shared.Next(1000, 10000)}",
+        // us, ca and any fallback use the North American format.
+        _ => $"+1 ({Random.Shared.Next(200, 1000)}) {Random.Shared.Next(200, 1000)}-{Random.Shared.Next(0, 10000):D4}"
+    };
+
+    private static string RandomPostcode(string code) => code switch
+    {
+        "uk" => UkPostcode(),
+        "ca" => $"{Letter()}{Digit()}{Letter()} {Digit()}{Letter()}{Digit()}",        // A1A 1A1
+        "ie" => $"{Letter()}{Digit()}{Digit()} {Alnum()}{Alnum()}{Alnum()}{Alnum()}", // Eircode, e.g. D02 X285
+        "us" => Random.Shared.Next(10000, 100000).ToString(),                          // 5-digit ZIP
+        _ => Random.Shared.Next(1000, 10000).ToString()                               // au/nz/za: 4 digits
+    };
 
     private static string UkPostcode()
     {
-        const string letters = "ABDEFGHJLNPQRSTUWXYZ";
         var sb = new StringBuilder();
-        for (var i = 0; i < Random.Shared.Next(1, 3); i++) sb.Append(letters[Random.Shared.Next(letters.Length)]);
+        for (var i = 0; i < Random.Shared.Next(1, 3); i++) sb.Append(Letter());
         sb.Append(Random.Shared.Next(1, 30));
-        sb.Append(' ').Append(Random.Shared.Next(0, 10));
-        sb.Append(letters[Random.Shared.Next(letters.Length)]).Append(letters[Random.Shared.Next(letters.Length)]);
+        sb.Append(' ').Append(Random.Shared.Next(0, 10)).Append(Letter()).Append(Letter());
         return sb.ToString();
     }
 
-    private static string UsZip() => Random.Shared.Next(10000, 100000).ToString();
-
-    private static string RandomPhone(string country)
-    {
-        if (country == "uk")
-            return $"+44 7{Random.Shared.Next(100, 1000)} {Random.Shared.Next(100000, 1000000)}";
-        // US: +1 (NXX) NXX-XXXX
-        return $"+1 ({Random.Shared.Next(200, 1000)}) {Random.Shared.Next(200, 1000)}-{Random.Shared.Next(0, 10000):D4}";
-    }
+    private const string PostLetters = "ABCDEFGHJKLMNPRSTUVWXY"; // avoid easily-confused letters
+    private static char Letter() => PostLetters[Random.Shared.Next(PostLetters.Length)];
+    private static char Digit() => (char)('0' + Random.Shared.Next(10));
+    private static char Alnum() => Random.Shared.Next(2) == 0 ? Letter() : Digit();
 
     private static string RandomPassword()
     {
@@ -101,7 +117,6 @@ public sealed class RandomIdentityGenerator : IIdentityGenerator
 
         var len = RandomNumberGenerator.GetInt32(14, 17); // 14..16
         var chars = new char[len];
-        // Guarantee one from each class, then fill, then shuffle (crypto RNG throughout).
         chars[0] = lower[RandomNumberGenerator.GetInt32(lower.Length)];
         chars[1] = upper[RandomNumberGenerator.GetInt32(upper.Length)];
         chars[2] = digits[RandomNumberGenerator.GetInt32(digits.Length)];
@@ -115,35 +130,123 @@ public sealed class RandomIdentityGenerator : IIdentityGenerator
         return new string(chars);
     }
 
-    private static (string question, string answer) RandomSecurity(LocaleData d)
+    private static (string question, string answer) RandomSecurity((string City, string Region)[] cities)
     {
         var q = Random.Shared.Next(SecurityQuestions.Length);
         var answer = q switch
         {
-            0 => Pick(d.Surnames),       // mother's maiden name
-            1 => Pick(Pets),             // first pet
-            2 => Pick(d.Schools),        // first school
-            3 => Pick(d.Cities).City,    // town born
-            4 => Pick(d.MaleFirst),      // best friend
-            5 => Pick(Cars),             // first car
-            6 => Pick(d.FemaleFirst),    // favourite teacher
-            _ => Pick(Foods)             // favourite food
+            0 => Pick(Surnames),     // mother's maiden name
+            1 => Pick(Pets),         // first pet
+            2 => Pick(Schools),      // first school
+            3 => Pick(cities).City,  // town born
+            4 => Pick(MaleFirst),    // best friend
+            5 => Pick(Cars),         // first car
+            6 => Pick(FemaleFirst),  // favourite teacher
+            _ => Pick(Foods)         // favourite food
         };
         return (SecurityQuestions[q], answer);
     }
 
-    // ---- Data pools ----------------------------------------------------------------------------
+    // ---- Per-country city/region data ----------------------------------------------------------
 
-    private sealed class LocaleData
+    private sealed class Country
     {
-        public required string[] MaleFirst { get; init; }
-        public required string[] FemaleFirst { get; init; }
-        public required string[] Surnames { get; init; }
-        public required string[] StreetNames { get; init; }
-        public required string[] StreetTypes { get; init; }
+        public required string Code { get; init; }
         public required (string City, string Region)[] Cities { get; init; }
-        public required string[] Schools { get; init; }
     }
+
+    private static readonly Country[] CountryData =
+    [
+        new()
+        {
+            Code = "us",
+            Cities =
+            [
+                ("New York", "NY"), ("Los Angeles", "CA"), ("Chicago", "IL"), ("Houston", "TX"),
+                ("Phoenix", "AZ"), ("Philadelphia", "PA"), ("San Antonio", "TX"), ("San Diego", "CA"),
+                ("Dallas", "TX"), ("Austin", "TX"), ("Seattle", "WA"), ("Denver", "CO"), ("Boston", "MA"),
+                ("Nashville", "TN"), ("Portland", "OR"), ("Las Vegas", "NV"), ("Atlanta", "GA"),
+                ("Miami", "FL"), ("Minneapolis", "MN"), ("Raleigh", "NC")
+            ]
+        },
+        new()
+        {
+            Code = "uk",
+            Cities =
+            [
+                ("London", "Greater London"), ("Manchester", "Greater Manchester"),
+                ("Birmingham", "West Midlands"), ("Leeds", "West Yorkshire"), ("Liverpool", "Merseyside"),
+                ("Sheffield", "South Yorkshire"), ("Bristol", "Bristol"), ("Newcastle", "Tyne and Wear"),
+                ("Nottingham", "Nottinghamshire"), ("Leicester", "Leicestershire"), ("Brighton", "East Sussex"),
+                ("Southampton", "Hampshire"), ("Oxford", "Oxfordshire"), ("Cambridge", "Cambridgeshire"),
+                ("York", "North Yorkshire"), ("Cardiff", "South Glamorgan"), ("Edinburgh", "Midlothian"),
+                ("Glasgow", "Lanarkshire"), ("Aberdeen", "Aberdeenshire"), ("Belfast", "County Antrim")
+            ]
+        },
+        new()
+        {
+            Code = "ie",
+            Cities =
+            [
+                ("Dublin", "Leinster"), ("Cork", "Munster"), ("Galway", "Connacht"), ("Limerick", "Munster"),
+                ("Waterford", "Munster"), ("Kilkenny", "Leinster"), ("Sligo", "Connacht"),
+                ("Wexford", "Leinster"), ("Drogheda", "Leinster"), ("Dundalk", "Leinster"),
+                ("Bray", "Leinster"), ("Navan", "Leinster"), ("Ennis", "Munster"), ("Tralee", "Munster"),
+                ("Athlone", "Leinster"), ("Letterkenny", "Ulster")
+            ]
+        },
+        new()
+        {
+            Code = "ca",
+            Cities =
+            [
+                ("Toronto", "ON"), ("Montreal", "QC"), ("Vancouver", "BC"), ("Calgary", "AB"),
+                ("Ottawa", "ON"), ("Edmonton", "AB"), ("Winnipeg", "MB"), ("Halifax", "NS"),
+                ("Victoria", "BC"), ("Hamilton", "ON"), ("Kitchener", "ON"), ("Saskatoon", "SK"),
+                ("Regina", "SK"), ("St. John's", "NL"), ("Kelowna", "BC")
+            ]
+        },
+        new()
+        {
+            Code = "au",
+            Cities =
+            [
+                ("Sydney", "NSW"), ("Melbourne", "VIC"), ("Brisbane", "QLD"), ("Perth", "WA"),
+                ("Adelaide", "SA"), ("Gold Coast", "QLD"), ("Canberra", "ACT"), ("Newcastle", "NSW"),
+                ("Hobart", "TAS"), ("Darwin", "NT"), ("Wollongong", "NSW"), ("Geelong", "VIC"),
+                ("Cairns", "QLD"), ("Townsville", "QLD"), ("Ballarat", "VIC")
+            ]
+        },
+        new()
+        {
+            Code = "nz",
+            Cities =
+            [
+                ("Auckland", "Auckland"), ("Wellington", "Wellington"), ("Christchurch", "Canterbury"),
+                ("Hamilton", "Waikato"), ("Tauranga", "Bay of Plenty"), ("Dunedin", "Otago"),
+                ("Palmerston North", "Manawatu"), ("Napier", "Hawke's Bay"), ("Nelson", "Nelson"),
+                ("Rotorua", "Bay of Plenty"), ("New Plymouth", "Taranaki"), ("Whangarei", "Northland"),
+                ("Invercargill", "Southland"), ("Queenstown", "Otago")
+            ]
+        },
+        new()
+        {
+            Code = "za",
+            Cities =
+            [
+                ("Johannesburg", "Gauteng"), ("Cape Town", "Western Cape"), ("Durban", "KwaZulu-Natal"),
+                ("Pretoria", "Gauteng"), ("Gqeberha", "Eastern Cape"), ("Bloemfontein", "Free State"),
+                ("East London", "Eastern Cape"), ("Pietermaritzburg", "KwaZulu-Natal"),
+                ("Polokwane", "Limpopo"), ("Nelspruit", "Mpumalanga"), ("Kimberley", "Northern Cape"),
+                ("George", "Western Cape"), ("Stellenbosch", "Western Cape"), ("Rustenburg", "North West")
+            ]
+        }
+    ];
+
+    private static readonly Dictionary<string, Country> CountriesByCode =
+        CountryData.ToDictionary(c => c.Code);
+
+    // ---- Shared pools --------------------------------------------------------------------------
 
     private static readonly string[] SecurityQuestions =
     [
@@ -168,123 +271,76 @@ public sealed class RandomIdentityGenerator : IIdentityGenerator
     [
         "Ford Focus", "Vauxhall Corsa", "Volkswagen Golf", "Toyota Corolla", "Honda Civic",
         "Nissan Micra", "Renault Clio", "Peugeot 208", "Ford Fiesta", "Mini Cooper",
-        "Hyundai i30", "Mazda 3", "Chevrolet Malibu", "Jeep Wrangler", "Subaru Impreza"
+        "Hyundai i30", "Mazda 3", "Chevrolet Malibu", "Jeep Wrangler", "Subaru Impreza", "Holden Commodore"
     ];
 
     private static readonly string[] Foods =
     [
         "Pizza", "Sushi", "Lasagne", "Curry", "Tacos", "Burgers", "Pasta", "Roast dinner",
-        "Fish and chips", "Ramen", "Pad Thai", "Steak", "Risotto", "Paella", "Burrito"
+        "Fish and chips", "Ramen", "Pad Thai", "Steak", "Risotto", "Paella", "Burrito", "Biltong"
     ];
 
-    private static readonly LocaleData Uk = new()
-    {
-        MaleFirst =
-        [
-            "James", "Oliver", "Harry", "Jack", "George", "Noah", "Charlie", "Jacob", "Thomas", "Oscar",
-            "William", "Henry", "Leo", "Alfie", "Joshua", "Freddie", "Archie", "Logan", "Theo", "Arthur",
-            "Mason", "Daniel", "Edward", "Samuel", "Joseph", "Max", "Lucas", "Ethan", "Alexander", "Benjamin",
-            "Sebastian", "Harrison", "Dylan", "Callum", "Liam", "Nathan", "Ryan", "Aaron", "Connor", "Jamie"
-        ],
-        FemaleFirst =
-        [
-            "Olivia", "Amelia", "Isla", "Ava", "Emily", "Sophia", "Grace", "Mia", "Poppy", "Ella",
-            "Lily", "Charlotte", "Evie", "Sophie", "Isabella", "Freya", "Daisy", "Phoebe", "Florence", "Alice",
-            "Jessica", "Ruby", "Chloe", "Holly", "Lucy", "Emma", "Hannah", "Megan", "Eleanor", "Maisie",
-            "Imogen", "Bethany", "Abigail", "Molly", "Scarlett", "Rosie", "Niamh", "Erin", "Katie", "Zoe"
-        ],
-        Surnames =
-        [
-            "Smith", "Jones", "Williams", "Taylor", "Brown", "Davies", "Evans", "Wilson", "Thomas", "Roberts",
-            "Johnson", "Lewis", "Walker", "Robinson", "Wood", "Thompson", "White", "Watson", "Jackson", "Wright",
-            "Green", "Harris", "Cooper", "King", "Lee", "Martin", "Clarke", "James", "Morgan", "Hughes",
-            "Edwards", "Hill", "Moore", "Clark", "Harrison", "Scott", "Young", "Morris", "Hall", "Ward",
-            "Turner", "Carter", "Phillips", "Mitchell", "Patel", "Adams", "Campbell", "Anderson", "Allen", "Bell"
-        ],
-        StreetNames =
-        [
-            "High", "Station", "Church", "Victoria", "Main", "Park", "Mill", "Queens", "Kings", "New",
-            "Manor", "School", "North", "Green", "Springfield", "George", "Albert", "Bridge", "Grange", "Windsor",
-            "York", "Chapel", "Meadow", "Oak", "Elm", "Highfield", "Woodland", "Riverside", "Castle", "Abbey",
-            "Priory", "Beech", "Hawthorn", "Willow", "Cedar", "Birch", "Maple", "West", "South", "Orchard"
-        ],
-        StreetTypes =
-        [
-            "Road", "Street", "Lane", "Avenue", "Close", "Drive", "Way", "Gardens", "Grove", "Crescent",
-            "Place", "Court", "Terrace", "Walk"
-        ],
-        Cities =
-        [
-            ("London", "Greater London"), ("Manchester", "Greater Manchester"), ("Birmingham", "West Midlands"),
-            ("Leeds", "West Yorkshire"), ("Liverpool", "Merseyside"), ("Sheffield", "South Yorkshire"),
-            ("Bristol", "Bristol"), ("Newcastle", "Tyne and Wear"), ("Nottingham", "Nottinghamshire"),
-            ("Leicester", "Leicestershire"), ("Brighton", "East Sussex"), ("Southampton", "Hampshire"),
-            ("Reading", "Berkshire"), ("Oxford", "Oxfordshire"), ("Cambridge", "Cambridgeshire"),
-            ("York", "North Yorkshire"), ("Norwich", "Norfolk"), ("Plymouth", "Devon"), ("Exeter", "Devon"),
-            ("Bath", "Somerset"), ("Cardiff", "South Glamorgan"), ("Swansea", "West Glamorgan"),
-            ("Edinburgh", "Midlothian"), ("Glasgow", "Lanarkshire"), ("Aberdeen", "Aberdeenshire"),
-            ("Coventry", "West Midlands"), ("Hull", "East Yorkshire"), ("Derby", "Derbyshire"),
-            ("Preston", "Lancashire"), ("Ipswich", "Suffolk")
-        ],
-        Schools =
-        [
-            "St Mary's Primary School", "Greenfield High School", "Oakwood Academy", "Victoria Primary School",
-            "Park View School", "Riverside Comprehensive", "Hillcrest Academy", "St John's CofE School",
-            "Meadow Primary School", "Kingsway High School", "Brookfield School", "Highfield Academy",
-            "The Grove School", "Abbey Park School", "Woodlands Primary School"
-        ]
-    };
+    private static readonly string[] MaleFirst =
+    [
+        "James", "Oliver", "Harry", "Jack", "George", "Noah", "Charlie", "Jacob", "Thomas", "Oscar",
+        "William", "Henry", "Leo", "Alfie", "Joshua", "Freddie", "Archie", "Logan", "Theo", "Arthur",
+        "Mason", "Daniel", "Edward", "Samuel", "Joseph", "Max", "Lucas", "Ethan", "Alexander", "Benjamin",
+        "Sebastian", "Harrison", "Dylan", "Callum", "Liam", "Nathan", "Ryan", "Aaron", "Connor", "Jamie",
+        "Elijah", "Michael", "Jackson", "Aiden", "Matthew", "David", "Carter", "Owen", "Wyatt", "John",
+        "Luke", "Jayden", "Grayson", "Levi", "Isaac", "Gabriel", "Julian", "Anthony", "Andrew", "Adam",
+        "Cameron", "Jordan", "Patrick", "Sean", "Cian", "Conor", "Declan", "Niall", "Finn", "Rory",
+        "Hamish", "Lachlan", "Hunter", "Cooper", "Blake", "Riley", "Angus", "Tane", "Sipho", "Thabo"
+    ];
 
-    private static readonly LocaleData Us = new()
-    {
-        MaleFirst =
-        [
-            "Liam", "Noah", "William", "James", "Oliver", "Benjamin", "Elijah", "Lucas", "Mason", "Logan",
-            "Alexander", "Ethan", "Jacob", "Michael", "Daniel", "Henry", "Jackson", "Sebastian", "Aiden", "Matthew",
-            "Samuel", "David", "Joseph", "Carter", "Owen", "Wyatt", "John", "Jack", "Luke", "Jayden",
-            "Dylan", "Grayson", "Levi", "Isaac", "Gabriel", "Julian", "Anthony", "Christopher", "Joshua", "Andrew"
-        ],
-        FemaleFirst =
-        [
-            "Emma", "Olivia", "Ava", "Isabella", "Sophia", "Mia", "Charlotte", "Amelia", "Harper", "Evelyn",
-            "Abigail", "Emily", "Elizabeth", "Avery", "Sofia", "Ella", "Madison", "Scarlett", "Victoria", "Grace",
-            "Chloe", "Camila", "Penelope", "Riley", "Layla", "Lillian", "Nora", "Zoey", "Hannah", "Lily",
-            "Ellie", "Addison", "Natalie", "Brooklyn", "Hailey", "Savannah", "Aria", "Aubrey", "Stella", "Allison"
-        ],
-        Surnames =
-        [
-            "Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Rodriguez", "Martinez",
-            "Hernandez", "Lopez", "Gonzalez", "Wilson", "Anderson", "Thomas", "Taylor", "Moore", "Jackson", "Martin",
-            "Lee", "Perez", "Thompson", "White", "Harris", "Sanchez", "Clark", "Ramirez", "Lewis", "Robinson",
-            "Walker", "Young", "Allen", "King", "Wright", "Scott", "Torres", "Nguyen", "Hill", "Flores",
-            "Green", "Adams", "Nelson", "Baker", "Hall", "Rivera", "Campbell", "Mitchell", "Carter", "Roberts"
-        ],
-        StreetNames =
-        [
-            "Main", "Oak", "Pine", "Maple", "Cedar", "Elm", "Washington", "Lake", "Hill", "Park",
-            "Walnut", "Spring", "North", "Highland", "Sunset", "Lincoln", "Church", "River", "Meadow", "Forest",
-            "Madison", "Jefferson", "Franklin", "Willow", "Birch", "Chestnut", "Ridge", "Valley", "Center", "Jackson",
-            "Adams", "Liberty", "Union", "College", "Prospect", "Cherry", "Dogwood", "Magnolia", "Aspen", "Cypress"
-        ],
-        StreetTypes =
-        [
-            "St", "Ave", "Dr", "Blvd", "Ln", "Rd", "Ct", "Pl", "Way", "Ter", "Cir", "Trail"
-        ],
-        Cities =
-        [
-            ("New York", "NY"), ("Los Angeles", "CA"), ("Chicago", "IL"), ("Houston", "TX"), ("Phoenix", "AZ"),
-            ("Philadelphia", "PA"), ("San Antonio", "TX"), ("San Diego", "CA"), ("Dallas", "TX"), ("Austin", "TX"),
-            ("San Jose", "CA"), ("Jacksonville", "FL"), ("Columbus", "OH"), ("Charlotte", "NC"), ("Indianapolis", "IN"),
-            ("Seattle", "WA"), ("Denver", "CO"), ("Boston", "MA"), ("Nashville", "TN"), ("Portland", "OR"),
-            ("Las Vegas", "NV"), ("Detroit", "MI"), ("Memphis", "TN"), ("Atlanta", "GA"), ("Miami", "FL"),
-            ("Minneapolis", "MN"), ("Kansas City", "MO"), ("Raleigh", "NC"), ("Omaha", "NE"), ("Tampa", "FL")
-        ],
-        Schools =
-        [
-            "Lincoln High School", "Washington Elementary", "Riverside Middle School", "Jefferson High School",
-            "Oakdale Elementary", "Maplewood High School", "Roosevelt Middle School", "Kennedy High School",
-            "Westfield Elementary", "Hillside High School", "Central High School", "Eastwood Elementary",
-            "Pine Valley School", "Sunset Ridge Academy", "Lakeview High School"
-        ]
-    };
+    private static readonly string[] FemaleFirst =
+    [
+        "Olivia", "Amelia", "Isla", "Ava", "Emily", "Sophia", "Grace", "Mia", "Poppy", "Ella",
+        "Lily", "Charlotte", "Evie", "Sophie", "Isabella", "Freya", "Daisy", "Phoebe", "Florence", "Alice",
+        "Jessica", "Ruby", "Chloe", "Holly", "Lucy", "Emma", "Hannah", "Megan", "Eleanor", "Maisie",
+        "Imogen", "Bethany", "Abigail", "Molly", "Scarlett", "Rosie", "Niamh", "Erin", "Katie", "Zoe",
+        "Harper", "Evelyn", "Avery", "Sofia", "Madison", "Victoria", "Camila", "Penelope", "Layla", "Nora",
+        "Zoey", "Ellie", "Addison", "Natalie", "Brooklyn", "Hailey", "Savannah", "Aria", "Aubrey", "Stella",
+        "Allison", "Saoirse", "Aoife", "Ciara", "Maeve", "Orla", "Sinead", "Aria", "Mila", "Hazel",
+        "Willow", "Aroha", "Mere", "Thandi", "Lerato", "Zara", "Maya", "Anya", "Priya", "Aaliyah"
+    ];
+
+    private static readonly string[] Surnames =
+    [
+        "Smith", "Jones", "Williams", "Taylor", "Brown", "Davies", "Evans", "Wilson", "Thomas", "Roberts",
+        "Johnson", "Lewis", "Walker", "Robinson", "Wood", "Thompson", "White", "Watson", "Jackson", "Wright",
+        "Green", "Harris", "Cooper", "King", "Lee", "Martin", "Clarke", "James", "Morgan", "Hughes",
+        "Edwards", "Hill", "Moore", "Clark", "Harrison", "Scott", "Young", "Morris", "Hall", "Ward",
+        "Turner", "Carter", "Phillips", "Mitchell", "Patel", "Adams", "Campbell", "Anderson", "Allen", "Bell",
+        "Garcia", "Miller", "Davis", "Rodriguez", "Martinez", "Hernandez", "Lopez", "Gonzalez", "Perez",
+        "Sanchez", "Ramirez", "Torres", "Flores", "Nelson", "Baker", "Rivera", "Murphy", "Kelly", "Byrne",
+        "Ryan", "Walsh", "McCarthy", "Gallagher", "Doyle", "Kennedy", "Lynch", "Murray", "Quinn", "Brennan",
+        "Singh", "Kaur", "Nguyen", "Chen", "Wang", "Kim", "Naidoo", "Botha", "Pillay", "Dlamini",
+        "Mokoena", "Williamson", "Fraser", "Stewart", "Cameron", "Ferguson", "Reid", "Graham", "Wallace", "Bennett"
+    ];
+
+    private static readonly string[] StreetNames =
+    [
+        "High", "Station", "Church", "Victoria", "Main", "Park", "Mill", "Queens", "Kings", "New",
+        "Manor", "School", "North", "Green", "Springfield", "George", "Albert", "Bridge", "Grange", "Windsor",
+        "York", "Chapel", "Meadow", "Oak", "Elm", "Highfield", "Woodland", "Riverside", "Castle", "Abbey",
+        "Pine", "Maple", "Cedar", "Washington", "Lake", "Hill", "Walnut", "Spring", "Highland", "Sunset",
+        "Lincoln", "River", "Forest", "Madison", "Jefferson", "Franklin", "Willow", "Birch", "Chestnut", "Ridge",
+        "Valley", "Jackson", "Liberty", "Union", "College", "Prospect", "Cherry", "Hillside", "Garden", "Orchard",
+        "Sycamore", "Linden", "Magnolia", "Acacia", "Wattle", "Banksia", "Beach", "Harbour", "Mountain", "Vista"
+    ];
+
+    private static readonly string[] StreetTypes =
+    [
+        "Street", "Road", "Avenue", "Lane", "Drive", "Way", "Close", "Court", "Place", "Terrace",
+        "Crescent", "Grove", "Parade", "Boulevard"
+    ];
+
+    private static readonly string[] Schools =
+    [
+        "St Mary's School", "Greenfield High School", "Oakwood Academy", "Victoria Primary School",
+        "Park View School", "Riverside College", "Hillcrest Academy", "St John's School",
+        "Meadow Primary School", "Kingsway High School", "Brookfield School", "Highfield Academy",
+        "The Grove School", "Lincoln High School", "Washington Elementary", "Roosevelt Middle School",
+        "Kennedy High School", "Westfield School", "Lakeview High School", "Sacred Heart School"
+    ];
 }

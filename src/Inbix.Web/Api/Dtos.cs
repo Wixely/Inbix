@@ -65,7 +65,7 @@ public sealed record JunkItemDto(long Id, string? Sender, string? Subject, strin
 
 // --- Identities ---
 
-public sealed record GenerateIdentityRequest(bool? Uk, bool? Us);
+public sealed record GenerateIdentityRequest(string[]? Countries);
 
 /// <summary>Body for linking an alias to an identity (null IdentityId unlinks the alias).</summary>
 public sealed record LinkAliasRequest(long? IdentityId);

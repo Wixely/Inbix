@@ -1,3 +1,5 @@
+using Inbix.Core.Identities;
+
 namespace Inbix.Core.Domain;
 
 /// <summary>
@@ -38,12 +40,7 @@ public sealed class Identity
 
     public string FullName => $"{FirstName} {LastName}".Trim();
 
-    public string CountryLabel => Country?.ToLowerInvariant() switch
-    {
-        "us" => "United States",
-        "uk" => "United Kingdom",
-        _ => Country ?? string.Empty
-    };
+    public string CountryLabel => Countries.Label(Country);
 
     /// <summary>Age in whole years from <see cref="DateOfBirth"/> to today (UTC).</summary>
     public int AgeYears

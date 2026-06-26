@@ -167,8 +167,7 @@ public static class ApiEndpoints
         api.MapPost("/identities/generate", (GenerateIdentityRequest? req, IIdentityGenerator gen) =>
             Results.Ok(IdentityDto.From(gen.Generate(new Inbix.Core.Identities.GenerateOptions
             {
-                IncludeUk = req?.Uk ?? true,
-                IncludeUs = req?.Us ?? true
+                Countries = req?.Countries
             }))));
 
         api.MapPost("/identities", async (SaveIdentityRequest req, IIdentityService service, CancellationToken ct) =>
