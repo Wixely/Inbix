@@ -2,6 +2,7 @@ using System.Globalization;
 using Inbix.Core.Abstractions;
 using Inbix.Core.Domain;
 using Inbix.Core.Options;
+using Inbix.Data.Sqlite;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -43,8 +44,11 @@ public sealed class SqliteBackupService : IBackupService
 
         await using (var source = await _factory.OpenConnectionAsync(ct).ConfigureAwait(false))
         {
-            if (source is not SqliteConnection sqliteSource)
-                throw new NotSupportedException("Backups are only supported for the SQLite provider.");
+            // In exclusive-locking mode the factory hands out a non-owning lease, so unwrap to the real
+            // SqliteConnection for the online backup API. The lease holds the access gate for the whole
+            // backup, which correctly serialises it against other DB operations.
+            var sqliteSource = source.AsSqliteConnection()
+                ?? throw new NotSupportedException("Backups are only supported for the SQLite provider.");
 
             // Pooling=False so the file handle is released on dispose, allowing retention pruning
             // to delete old backups (and the new file to be moved/restored) without a lingering lock.

@@ -87,6 +87,8 @@ using the `__` separator (e.g. `Inbix__Smtp__Port=2525`).
 | `Inbix:Database:Provider` | `sqlite` | Database provider (only `sqlite` implemented) |
 | `Inbix:Database:ConnectionString` | `Data Source=./data/inbix.db` | ADO.NET connection string |
 | `Inbix:Database:MigrateOnStartup` | `true` | Apply pending migrations at startup |
+| `Inbix:Database:JournalMode` | `WAL` | SQLite `journal_mode`. `WAL` for local disk; `DELETE` for a rollback journal |
+| `Inbix:Database:ExclusiveLocking` | `false` | Single-connection exclusive locking. Set `true` when the DB is on a **network filesystem (NFS/SMB)** — see [SETUP.md](SETUP.md#8-suggestions--tips) |
 | `Inbix:Smtp:Port` | `25` | SMTP listen port |
 | `Inbix:Smtp:ServerName` | `inbix` | EHLO/banner name |
 | `Inbix:Smtp:MaxMessageSizeBytes` | `26214400` | Max accepted message size (else `552`) |
