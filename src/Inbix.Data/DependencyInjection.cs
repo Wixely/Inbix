@@ -1,5 +1,6 @@
 using Dapper;
 using Inbix.Core.Abstractions;
+using Inbix.Core.Identities;
 using Inbix.Core.Options;
 using Inbix.Data.Dapper;
 using Inbix.Data.Migrations;
@@ -24,6 +25,7 @@ public static class DependencyInjection
         // Dapper global config: map snake_case columns to PascalCase properties + ISO timestamps.
         DefaultTypeMap.MatchNamesWithUnderscores = true;
         SqlMapper.AddTypeHandler(new DateTimeOffsetHandler());
+        SqlMapper.AddTypeHandler(new DateOnlyHandler());
 
         services.AddSingleton<IDbConnectionFactory>(sp =>
         {
@@ -55,6 +57,10 @@ public static class DependencyInjection
         services.AddSingleton<ISettingsRepository, SettingsRepository>();
         services.AddSingleton<IBlacklistMatcher, CachingBlacklistMatcher>();
         services.AddSingleton<IBlacklistService, BlacklistService>();
+
+        services.AddSingleton<IIdentityRepository, IdentityRepository>();
+        services.AddSingleton<IIdentityService, IdentityService>();
+        services.AddSingleton<IIdentityGenerator, RandomIdentityGenerator>();
 
         services.AddSingleton<IRawMessageStore, FileSystemRawMessageStore>();
         services.AddSingleton<IAliasResolver, CachingAliasResolver>();

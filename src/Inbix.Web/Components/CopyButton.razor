@@ -1,0 +1,24 @@
+@inject IJSRuntime JS
+
+<button type="button" class="btn-link copy-btn" title="Copy to clipboard"
+        @onclick="CopyAsync" @onclick:stopPropagation="true" disabled="@(string.IsNullOrEmpty(Text))">
+    @(_done ? "Copied" : "Copy")
+</button>
+
+@code {
+    [Parameter] public string? Text { get; set; }
+
+    private bool _done;
+
+    private async Task CopyAsync()
+    {
+        if (string.IsNullOrEmpty(Text)) return;
+        try { await JS.InvokeVoidAsync("inbixCopy", Text); }
+        catch { return; }
+
+        _done = true;
+        StateHasChanged();
+        await Task.Delay(1200);
+        _done = false; // re-render happens automatically when this handler completes
+    }
+}

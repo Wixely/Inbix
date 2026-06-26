@@ -150,6 +150,59 @@ public static class ApiEndpoints
             return Results.Ok();
         });
 
+        // --- Identities ---
+        api.MapGet("/identities", async (IIdentityRepository repo, CancellationToken ct) =>
+            Results.Ok((await repo.ListAsync(ct)).Select(IdentityDto.From)));
+
+        api.MapGet("/identities/{id:long}", async (long id, IIdentityRepository repo, CancellationToken ct) =>
+            await repo.GetByIdAsync(id, ct) is { } i ? Results.Ok(IdentityDto.From(i)) : Results.NotFound());
+
+        api.MapGet("/identities/by-alias/{aliasId:long}", async (long aliasId, IIdentityRepository repo, CancellationToken ct) =>
+            await repo.GetByAliasIdAsync(aliasId, ct) is { } i ? Results.Ok(IdentityDto.From(i)) : Results.NotFound());
+
+        api.MapPost("/identities/generate", (GenerateIdentityRequest? req, IIdentityGenerator gen) =>
+            Results.Ok(IdentityDto.From(gen.Generate(new Inbix.Core.Identities.GenerateOptions
+            {
+                IncludeUk = req?.Uk ?? true,
+                IncludeUs = req?.Us ?? true
+            }))));
+
+        api.MapPost("/identities", async (SaveIdentityRequest req, IIdentityService service, CancellationToken ct) =>
+        {
+            var identity = req.ToDomain();
+            var error = IdentityRules.Validate(identity);
+            if (error is not null)
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["identity"] = [error] });
+            try
+            {
+                var created = await service.CreateAsync(identity, ct);
+                return Results.Created($"/api/identities/{created.Id}", IdentityDto.From(created));
+            }
+            catch (Exception ex) when (ex.Message.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase))
+            {
+                return Results.Conflict("That alias is already linked to another identity.");
+            }
+        });
+
+        api.MapPatch("/identities/{id:long}", async (long id, SaveIdentityRequest req, IIdentityService service, CancellationToken ct) =>
+        {
+            var identity = req.ToDomain(id);
+            var error = IdentityRules.Validate(identity);
+            if (error is not null)
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["identity"] = [error] });
+            var updated = await service.UpdateAsync(identity, ct);
+            return updated is null ? Results.NotFound() : Results.Ok(IdentityDto.From(updated));
+        });
+
+        api.MapPost("/identities/{id:long}/link", async (long id, LinkIdentityRequest req, IIdentityService service, CancellationToken ct) =>
+            await service.LinkAsync(id, req.AliasId, ct) is { } i ? Results.Ok(IdentityDto.From(i)) : Results.NotFound());
+
+        api.MapDelete("/identities/{id:long}", async (long id, IIdentityService service, CancellationToken ct) =>
+        {
+            await service.DeleteAsync(id, ct);
+            return Results.Ok();
+        });
+
         // --- Messages ---
         api.MapGet("/messages/{id:long}", async (long id, IMessageRepository repo, CancellationToken ct) =>
         {

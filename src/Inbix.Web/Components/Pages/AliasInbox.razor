@@ -46,6 +46,11 @@ else
             }
         </Preview>
     </MailWindow>
+
+    @if (!_alias.IsCatchAll)
+    {
+        <LinkedIdentityPanel AliasId="_alias.Id" AliasAddress="@_alias.Address" />
+    }
 }
 
 @code {

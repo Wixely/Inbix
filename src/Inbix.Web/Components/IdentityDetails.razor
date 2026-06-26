@@ -1,0 +1,55 @@
+@* Read-only display of a saved identity with copy buttons and a password reveal toggle. *@
+
+<div class="id-details">
+    <div class="id-row"><span class="id-key">Name</span>
+        <span class="id-val">@TitledName <CopyButton Text="@Identity.FullName" /></span></div>
+
+    @if (!string.IsNullOrWhiteSpace(Identity.Email))
+    {
+        <div class="id-row"><span class="id-key">Email</span>
+            <span class="id-val">@Identity.Email <CopyButton Text="@Identity.Email" /></span></div>
+    }
+
+    <div class="id-row"><span class="id-key">Username</span>
+        <span class="id-val">@Identity.Username <CopyButton Text="@Identity.Username" /></span></div>
+
+    <div class="id-row"><span class="id-key">Password</span>
+        <span class="id-val">
+            <span class="id-secret">@(_reveal ? Identity.Password : new string('•', 10))</span>
+            <button type="button" class="btn-link" @onclick="() => _reveal = !_reveal">@(_reveal ? "Hide" : "Show")</button>
+            <CopyButton Text="@Identity.Password" />
+        </span></div>
+
+    <div class="id-row"><span class="id-key">Date of birth</span>
+        <span class="id-val">@Identity.DateOfBirth.ToString("yyyy-MM-dd") <span class="muted">(age @Identity.AgeYears)</span></span></div>
+
+    @if (!string.IsNullOrWhiteSpace(Identity.Phone))
+    {
+        <div class="id-row"><span class="id-key">Phone</span>
+            <span class="id-val">@Identity.Phone <CopyButton Text="@Identity.Phone" /></span></div>
+    }
+
+    <div class="id-row"><span class="id-key">Address</span>
+        <span class="id-val">@Identity.FullAddress <CopyButton Text="@Identity.FullAddress" /></span></div>
+
+    @if (!string.IsNullOrWhiteSpace(Identity.SecurityQuestion))
+    {
+        <div class="id-row"><span class="id-key">Security</span>
+            <span class="id-val">@Identity.SecurityQuestion <strong>@Identity.SecurityAnswer</strong>
+                <CopyButton Text="@Identity.SecurityAnswer" /></span></div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(Identity.Notes))
+    {
+        <div class="id-row"><span class="id-key">Notes</span><span class="id-val">@Identity.Notes</span></div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Identity Identity { get; set; } = default!;
+
+    private bool _reveal;
+
+    private string TitledName =>
+        string.IsNullOrWhiteSpace(Identity.Title) ? Identity.FullName : $"{Identity.Title} {Identity.FullName}";
+}

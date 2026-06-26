@@ -1,0 +1,315 @@
+@page "/identities"
+@rendermode InteractiveServer
+@using Inbix.Core.Identities
+@using Inbix.Core.Validation
+@inject IIdentityRepository IdentityRepo
+@inject IIdentityService IdentityService
+@inject IIdentityGenerator Generator
+@inject IAliasRepository AliasRepo
+
+<div class="page-head">
+    <h1>Identities</h1>
+</div>
+
+<p class="muted page-note">
+    Generate believable, random sign-up identities <strong>offline</strong> and save them. Link one to an
+    alias to keep that email's consistent details — username, password, address, date of birth — together,
+    one click away from the inbox. <strong>These are fake details for registrations; never reuse a real one.</strong>
+</p>
+
+@if (_flash is not null)
+{
+    <p class="flash">@_flash</p>
+}
+
+<div class="panel id-generator">
+    <div class="id-gen-row">
+        <span class="muted">Randomise from</span>
+        <label class="switch">
+            <input type="checkbox" @bind="_includeUk" />
+            <span class="slider"></span>
+            <span class="switch-label">UK</span>
+        </label>
+        <label class="switch">
+            <input type="checkbox" @bind="_includeUs" />
+            <span class="slider"></span>
+            <span class="switch-label">US</span>
+        </label>
+        <button class="btn btn-primary" @onclick="GenerateDraft" disabled="@_busy">Generate identity</button>
+    </div>
+</div>
+
+@if (_showForm)
+{
+    <div class="panel id-form">
+        <div class="id-form-head">
+            <h2>@(_editingId is null ? "New identity" : "Edit identity")</h2>
+            <span class="badge">@_draft.CountryLabel</span>
+        </div>
+
+        <div class="id-grid">
+            <label class="id-field"><span>First name</span><input class="input" @bind="_draft.FirstName" /></label>
+            <label class="id-field"><span>Last name</span><input class="input" @bind="_draft.LastName" /></label>
+
+            <label class="id-field"><span>Title</span><input class="input" @bind="_draft.Title" /></label>
+            <label class="id-field"><span>Gender</span>
+                <select class="input" @bind="_draft.Gender">
+                    <option value="">—</option>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                </select>
+            </label>
+
+            <label class="id-field"><span>Username</span>
+                <span class="id-field-inline">
+                    <input class="input grow" @bind="_draft.Username" />
+                    <button type="button" class="btn-link" title="Regenerate" @onclick="RegenUsername">↻</button>
+                </span>
+            </label>
+            <label class="id-field"><span>Password</span>
+                <span class="id-field-inline">
+                    <input class="input grow" type="@(_revealPw ? "text" : "password")" @bind="_draft.Password" />
+                    <button type="button" class="btn-link" @onclick="() => _revealPw = !_revealPw">@(_revealPw ? "Hide" : "Show")</button>
+                    <button type="button" class="btn-link" title="Regenerate" @onclick="RegenPassword">↻</button>
+                </span>
+            </label>
+
+            <label class="id-field"><span>Date of birth</span><input class="input" type="date" @bind="_draft.DateOfBirth" /></label>
+            <label class="id-field"><span>Phone</span><input class="input" @bind="_draft.Phone" /></label>
+
+            <label class="id-field"><span>Region</span>
+                <select class="input" @bind="_draft.Country">
+                    <option value="uk">United Kingdom</option>
+                    <option value="us">United States</option>
+                </select>
+            </label>
+            <label class="id-field"><span>Linked alias</span>
+                <select class="input" @bind="_draft.AliasId" @bind:after="OnLinkChanged">
+                    <option value="">— not linked —</option>
+                    @foreach (var a in LinkableAliases())
+                    {
+                        <option value="@a.Id">@a.Address</option>
+                    }
+                </select>
+            </label>
+
+            <label class="id-field"><span>Email</span><input class="input" @bind="_draft.Email" /></label>
+            <label class="id-field"><span>Street</span><input class="input" @bind="_draft.Street" /></label>
+            <label class="id-field"><span>City</span><input class="input" @bind="_draft.City" /></label>
+            <label class="id-field"><span>State / county</span><input class="input" @bind="_draft.StateCounty" /></label>
+            <label class="id-field"><span>Postcode</span><input class="input" @bind="_draft.Postcode" /></label>
+
+            <label class="id-field"><span>Security question</span><input class="input" @bind="_draft.SecurityQuestion" /></label>
+            <label class="id-field"><span>Security answer</span><input class="input" @bind="_draft.SecurityAnswer" /></label>
+
+            <label class="id-field id-field-wide"><span>Notes</span><input class="input" @bind="_draft.Notes" /></label>
+        </div>
+
+        @if (_error is not null)
+        {
+            <p class="error inline-error">@_error</p>
+        }
+
+        <div class="btn-row">
+            <button class="btn btn-primary" @onclick="SaveAsync" disabled="@_busy">@(_editingId is null ? "Save identity" : "Save changes")</button>
+            @if (_editingId is null)
+            {
+                <button class="btn-ghost" @onclick="GenerateDraft" disabled="@_busy">Regenerate</button>
+            }
+            <button class="btn-ghost" @onclick="DiscardForm" disabled="@_busy">Discard</button>
+        </div>
+    </div>
+}
+
+@if (_identities is null)
+{
+    <p>Loading…</p>
+}
+else if (_identities.Count == 0 && !_showForm)
+{
+    <p class="muted empty-row">No saved identities yet — click “Generate identity” to make one.</p>
+}
+else if (_identities.Count > 0)
+{
+    <table class="grid">
+        <thead>
+            <tr><th>Name</th><th>Email / alias</th><th>Region</th><th>Age</th><th>Created</th><th class="actions-col"></th></tr>
+        </thead>
+        <tbody>
+            @foreach (var i in _identities)
+            {
+                <tr>
+                    <td>@i.FullName</td>
+                    <td>@(string.IsNullOrWhiteSpace(i.Email) ? "—" : i.Email)</td>
+                    <td>@i.Country.ToUpperInvariant()</td>
+                    <td>@i.AgeYears</td>
+                    <td>@i.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd")</td>
+                    <td class="row-actions">
+                        @if (_confirmingDeleteId == i.Id)
+                        {
+                            <span class="muted">Delete?</span>
+                            <button class="btn-link danger" @onclick="() => DeleteAsync(i)" disabled="@_busy">Yes</button>
+                            <button class="btn-link" @onclick="() => _confirmingDeleteId = null" disabled="@_busy">No</button>
+                        }
+                        else
+                        {
+                            <button class="btn-link" @onclick="() => ToggleExpand(i.Id)">@(_expandedId == i.Id ? "Hide" : "View")</button>
+                            <button class="btn-link" @onclick="() => OpenEdit(i)">Edit</button>
+                            <button class="btn-link danger" @onclick="() => _confirmingDeleteId = i.Id">Delete</button>
+                        }
+                    </td>
+                </tr>
+                @if (_expandedId == i.Id)
+                {
+                    <tr class="id-expand-row"><td colspan="6"><IdentityDetails Identity="i" /></td></tr>
+                }
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private IReadOnlyList<Identity>? _identities;
+    private List<Alias> _allAliases = [];
+
+    private Identity _draft = new();
+    private bool _showForm;
+    private long? _editingId;
+    private long? _expandedId;
+    private long? _confirmingDeleteId;
+
+    private bool _includeUk = true;
+    private bool _includeUs = true;
+    private bool _revealPw;
+    private bool _busy;
+    private string? _error;
+    private string? _flash;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _allAliases = (await AliasRepo.ListAsync()).Where(a => !a.IsCatchAll).ToList();
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync() => _identities = await IdentityRepo.ListAsync();
+
+    private IEnumerable<Alias> LinkableAliases()
+    {
+        var taken = (_identities ?? [])
+            .Where(i => i.AliasId is not null && i.Id != _editingId)
+            .Select(i => i.AliasId!.Value)
+            .ToHashSet();
+        return _allAliases.Where(a => !taken.Contains(a.Id));
+    }
+
+    private void GenerateDraft()
+    {
+        if (!_includeUk && !_includeUs) { _includeUk = true; _includeUs = true; }
+        _draft = Generator.Generate(new GenerateOptions { IncludeUk = _includeUk, IncludeUs = _includeUs });
+        _editingId = null;
+        _showForm = true;
+        _revealPw = false;
+        _error = null;
+    }
+
+    private void RegenUsername() => _draft.Username = Generator.NewUsername(_draft.FirstName, _draft.LastName);
+
+    private void RegenPassword() => _draft.Password = Generator.NewPassword();
+
+    private void OnLinkChanged()
+    {
+        if (_draft.AliasId is long aid)
+        {
+            var alias = _allAliases.FirstOrDefault(a => a.Id == aid);
+            if (alias is not null) _draft.Email = alias.Address;
+        }
+    }
+
+    private void OpenEdit(Identity i)
+    {
+        _draft = Clone(i);
+        _editingId = i.Id;
+        _showForm = true;
+        _revealPw = false;
+        _error = null;
+    }
+
+    private void DiscardForm()
+    {
+        _showForm = false;
+        _editingId = null;
+        _error = null;
+    }
+
+    private void ToggleExpand(long id) => _expandedId = _expandedId == id ? null : id;
+
+    private async Task SaveAsync()
+    {
+        _error = IdentityRules.Validate(_draft);
+        if (_error is not null) return;
+
+        _busy = true;
+        try
+        {
+            if (_editingId is null)
+            {
+                var created = await IdentityService.CreateAsync(_draft);
+                _flash = $"Saved identity for {created.FullName}.";
+            }
+            else
+            {
+                _draft.Id = _editingId.Value;
+                await IdentityService.UpdateAsync(_draft);
+                _flash = $"Updated {_draft.FullName}.";
+            }
+
+            DiscardForm();
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase)
+                ? "That alias is already linked to another identity."
+                : ex.Message;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task DeleteAsync(Identity i)
+    {
+        _busy = true;
+        try
+        {
+            await IdentityService.DeleteAsync(i.Id);
+            _flash = $"Deleted {i.FullName}.";
+            _confirmingDeleteId = null;
+            if (_expandedId == i.Id) _expandedId = null;
+            await ReloadAsync();
+        }
+        finally { _busy = false; }
+    }
+
+    private static Identity Clone(Identity i) => new()
+    {
+        Id = i.Id,
+        AliasId = i.AliasId,
+        Country = i.Country,
+        Title = i.Title,
+        Gender = i.Gender,
+        FirstName = i.FirstName,
+        LastName = i.LastName,
+        Username = i.Username,
+        Password = i.Password,
+        DateOfBirth = i.DateOfBirth,
+        Email = i.Email,
+        Phone = i.Phone,
+        Street = i.Street,
+        City = i.City,
+        StateCounty = i.StateCounty,
+        Postcode = i.Postcode,
+        SecurityQuestion = i.SecurityQuestion,
+        SecurityAnswer = i.SecurityAnswer,
+        Notes = i.Notes,
+        CreatedAt = i.CreatedAt
+    };
+}
