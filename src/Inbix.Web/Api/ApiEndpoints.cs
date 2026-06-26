@@ -157,8 +157,12 @@ public static class ApiEndpoints
         api.MapGet("/identities/{id:long}", async (long id, IIdentityRepository repo, CancellationToken ct) =>
             await repo.GetByIdAsync(id, ct) is { } i ? Results.Ok(IdentityDto.From(i)) : Results.NotFound());
 
-        api.MapGet("/identities/by-alias/{aliasId:long}", async (long aliasId, IIdentityRepository repo, CancellationToken ct) =>
-            await repo.GetByAliasIdAsync(aliasId, ct) is { } i ? Results.Ok(IdentityDto.From(i)) : Results.NotFound());
+        api.MapGet("/identities/by-alias/{aliasId:long}", async (long aliasId, IAliasRepository aliases, IIdentityRepository repo, CancellationToken ct) =>
+        {
+            var alias = await aliases.GetByIdAsync(aliasId, ct);
+            if (alias?.IdentityId is not long iid) return Results.NotFound();
+            return await repo.GetByIdAsync(iid, ct) is { } i ? Results.Ok(IdentityDto.From(i)) : Results.NotFound();
+        });
 
         api.MapPost("/identities/generate", (GenerateIdentityRequest? req, IIdentityGenerator gen) =>
             Results.Ok(IdentityDto.From(gen.Generate(new Inbix.Core.Identities.GenerateOptions
@@ -194,8 +198,12 @@ public static class ApiEndpoints
             return updated is null ? Results.NotFound() : Results.Ok(IdentityDto.From(updated));
         });
 
-        api.MapPost("/identities/{id:long}/link", async (long id, LinkIdentityRequest req, IIdentityService service, CancellationToken ct) =>
-            await service.LinkAsync(id, req.AliasId, ct) is { } i ? Results.Ok(IdentityDto.From(i)) : Results.NotFound());
+        // Linking is alias-keyed now (an identity may be linked to many aliases): set or clear an alias's identity.
+        api.MapPost("/aliases/{id:long}/identity", async (long id, LinkAliasRequest req, IIdentityService service, CancellationToken ct) =>
+        {
+            var identity = await service.LinkAliasAsync(id, req.IdentityId, ct);
+            return identity is null ? Results.Ok() : Results.Ok(IdentityDto.From(identity));
+        });
 
         api.MapDelete("/identities/{id:long}", async (long id, IIdentityService service, CancellationToken ct) =>
         {

@@ -42,21 +42,17 @@ public sealed class IdentityService : IIdentityService
         await Audit("identity.delete", id, ct).ConfigureAwait(false);
     }
 
-    public async Task<Identity?> LinkAsync(long id, long? aliasId, CancellationToken ct = default)
+    public async Task<Identity?> LinkAliasAsync(long aliasId, long? identityId, CancellationToken ct = default)
     {
-        var identity = await _identities.GetByIdAsync(id, ct).ConfigureAwait(false);
-        if (identity is null) return null;
-
-        identity.AliasId = aliasId;
-        if (aliasId is long resolved)
+        await _aliases.SetIdentityAsync(aliasId, identityId, ct).ConfigureAwait(false);
+        await _audit.WriteAsync(new AuditEntry
         {
-            var alias = await _aliases.GetByIdAsync(resolved, ct).ConfigureAwait(false);
-            if (alias is not null) identity.Email = alias.Address; // keep email consistent with the link
-        }
+            Action = identityId is null ? "identity.unlink" : "identity.link",
+            TargetType = "alias", TargetId = aliasId.ToString(),
+            Actor = "ui", CreatedAt = DateTimeOffset.UtcNow
+        }, ct).ConfigureAwait(false);
 
-        var updated = await _identities.UpdateAsync(identity, ct).ConfigureAwait(false);
-        await Audit(aliasId is null ? "identity.unlink" : "identity.link", id, ct).ConfigureAwait(false);
-        return updated;
+        return identityId is long id ? await _identities.GetByIdAsync(id, ct).ConfigureAwait(false) : null;
     }
 
     private Task Audit(string action, long id, CancellationToken ct) =>

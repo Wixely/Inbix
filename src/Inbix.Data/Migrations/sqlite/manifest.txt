@@ -5,3 +5,4 @@
 005_alias_expiry.sql
 006_alias_shortname.sql
 007_identities.sql
+008_identity_multi_alias.sql

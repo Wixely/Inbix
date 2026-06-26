@@ -6,10 +6,10 @@ public sealed record CreateAliasRequest(string LocalPart, string? Domain, string
 public sealed record UpdateAliasRequest(bool? Enabled, string? Notes);
 
 public sealed record AliasDto(long Id, string LocalPart, string Domain, string Address, bool Enabled,
-    DateTimeOffset CreatedAt, DateTimeOffset? DisabledAt, string? Notes)
+    DateTimeOffset CreatedAt, DateTimeOffset? DisabledAt, string? Notes, long? IdentityId)
 {
     public static AliasDto From(Alias a) =>
-        new(a.Id, a.LocalPart, a.Domain, a.Address, a.Enabled, a.CreatedAt, a.DisabledAt, a.Notes);
+        new(a.Id, a.LocalPart, a.Domain, a.Address, a.Enabled, a.CreatedAt, a.DisabledAt, a.Notes, a.IdentityId);
 }
 
 public sealed record MessageSummaryDto(long Id, long AliasId, string Recipient, string? Sender, string? Subject,
@@ -67,11 +67,12 @@ public sealed record JunkItemDto(long Id, string? Sender, string? Subject, strin
 
 public sealed record GenerateIdentityRequest(bool? Uk, bool? Us);
 
-public sealed record LinkIdentityRequest(long? AliasId);
+/// <summary>Body for linking an alias to an identity (null IdentityId unlinks the alias).</summary>
+public sealed record LinkAliasRequest(long? IdentityId);
 
 /// <summary>Body for create (POST) and update (PATCH) — same editable shape.</summary>
 public sealed record SaveIdentityRequest(
-    long? AliasId, string Country, string? Title, string? Gender,
+    string Country, string? Title, string? Gender,
     string FirstName, string LastName, string Username, string Password,
     DateOnly DateOfBirth, string? Email, string? Phone,
     string Street, string City, string? StateCounty, string Postcode,
@@ -79,7 +80,7 @@ public sealed record SaveIdentityRequest(
 {
     public Identity ToDomain(long id = 0) => new()
     {
-        Id = id, AliasId = AliasId, Country = Country, Title = Title, Gender = Gender,
+        Id = id, Country = Country, Title = Title, Gender = Gender,
         FirstName = FirstName, LastName = LastName, Username = Username, Password = Password,
         DateOfBirth = DateOfBirth, Email = Email, Phone = Phone,
         Street = Street, City = City, StateCounty = StateCounty, Postcode = Postcode,
@@ -88,14 +89,14 @@ public sealed record SaveIdentityRequest(
 }
 
 public sealed record IdentityDto(
-    long Id, long? AliasId, string Country, string? Title, string? Gender,
+    long Id, string Country, string? Title, string? Gender,
     string FirstName, string LastName, string FullName, string Username, string Password,
     DateOnly DateOfBirth, int AgeYears, string? Email, string? Phone,
     string Street, string City, string? StateCounty, string Postcode, string FullAddress,
     string? SecurityQuestion, string? SecurityAnswer, string? Notes, DateTimeOffset CreatedAt)
 {
     public static IdentityDto From(Identity i) => new(
-        i.Id, i.AliasId, i.Country, i.Title, i.Gender,
+        i.Id, i.Country, i.Title, i.Gender,
         i.FirstName, i.LastName, i.FullName, i.Username, i.Password,
         i.DateOfBirth, i.AgeYears, i.Email, i.Phone,
         i.Street, i.City, i.StateCounty, i.Postcode, i.FullAddress,

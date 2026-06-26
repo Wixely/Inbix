@@ -10,9 +10,6 @@ public sealed class Identity
 {
     public long Id { get; set; }
 
-    /// <summary>Linked alias, or null when the identity is standalone. At most one identity per alias.</summary>
-    public long? AliasId { get; set; }
-
     /// <summary>Region the identity was generated for: <c>"uk"</c> or <c>"us"</c>.</summary>
     public string Country { get; set; } = "uk";
 

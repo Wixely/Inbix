@@ -136,6 +136,7 @@ GET    /api/aliases
 POST   /api/aliases                 { "localPart": "spotify", "domain": null, "notes": null }
 GET    /api/aliases/{id}
 PATCH  /api/aliases/{id}            { "enabled": false, "notes": "..." }
+POST   /api/aliases/{id}/identity   { "identityId": 42 }           (null to unlink)
 GET    /api/aliases/{id}/messages
 GET    /api/identities
 POST   /api/identities              { "country": "uk", "firstName": "...", "username": "...", ... }
@@ -143,7 +144,6 @@ POST   /api/identities/generate     { "uk": true, "us": false }   (returns an un
 GET    /api/identities/{id}
 GET    /api/identities/by-alias/{aliasId}
 PATCH  /api/identities/{id}
-POST   /api/identities/{id}/link    { "aliasId": 42 }            (null aliasId to unlink)
 DELETE /api/identities/{id}
 GET    /api/messages/{id}
 GET    /api/messages/{id}/raw       (downloads .eml)
@@ -222,11 +222,13 @@ later. Tick **UK** and/or **US** to choose which pools to randomise from, then *
 username, strong password, full address, adult date of birth, phone, and a security question/answer.
 Edit any field (with per-field re-roll for username/password) and **Save**.
 
-Link an identity **1:1 to an alias** and its email auto-fills from the alias address; the linked
-identity then appears on that alias's inbox with copy buttons (the password is masked behind a reveal
-toggle). Deleting an alias unlinks its identity but keeps it. Identities — including passwords — are
-stored in the database in clear text so they can be retrieved, so treat the database and backups as
-secrets (see [Security notes](#security-notes)).
+Linking is done from an **alias's inbox** (the "Identity" panel): generate-and-link a fresh identity or
+link an existing one. **A single identity can be linked to many aliases** — reuse one persona across
+several sign-ups — while each alias has at most one identity (shown on its inbox with copy buttons, the
+password masked behind a reveal toggle). Deleting an identity unlinks its aliases but keeps the aliases;
+the Identities page lists which aliases use each identity. Identities — including passwords — are stored
+in the database in clear text so they can be retrieved, so treat the database and backups as secrets
+(see [Security notes](#security-notes)).
 
 ## Backups & restore
 

@@ -83,15 +83,6 @@
                     <option value="us">United States</option>
                 </select>
             </label>
-            <label class="id-field"><span>Linked alias</span>
-                <select class="input" @bind="_draft.AliasId" @bind:after="OnLinkChanged">
-                    <option value="">— not linked —</option>
-                    @foreach (var a in LinkableAliases())
-                    {
-                        <option value="@a.Id">@a.Address</option>
-                    }
-                </select>
-            </label>
 
             <label class="id-field"><span>Email</span><input class="input" @bind="_draft.Email" /></label>
             <label class="id-field"><span>Street</span><input class="input" @bind="_draft.Street" /></label>
@@ -133,14 +124,14 @@ else if (_identities.Count > 0)
 {
     <table class="grid">
         <thead>
-            <tr><th>Name</th><th>Email / alias</th><th>Region</th><th>Age</th><th>Created</th><th class="actions-col"></th></tr>
+            <tr><th>Name</th><th>Linked aliases</th><th>Region</th><th>Age</th><th>Created</th><th class="actions-col"></th></tr>
         </thead>
         <tbody>
             @foreach (var i in _identities)
             {
                 <tr>
                     <td>@i.FullName</td>
-                    <td>@(string.IsNullOrWhiteSpace(i.Email) ? "—" : i.Email)</td>
+                    <td class="muted">@LinkedAliasesText(i)</td>
                     <td>@i.Country.ToUpperInvariant()</td>
                     <td>@i.AgeYears</td>
                     <td>@i.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd")</td>
@@ -185,21 +176,19 @@ else if (_identities.Count > 0)
     private string? _error;
     private string? _flash;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
     {
+        _identities = await IdentityRepo.ListAsync();
         _allAliases = (await AliasRepo.ListAsync()).Where(a => !a.IsCatchAll).ToList();
-        await ReloadAsync();
     }
 
-    private async Task ReloadAsync() => _identities = await IdentityRepo.ListAsync();
-
-    private IEnumerable<Alias> LinkableAliases()
+    // Aliases that currently point at this identity (linking is managed from each alias's inbox).
+    private string LinkedAliasesText(Identity i)
     {
-        var taken = (_identities ?? [])
-            .Where(i => i.AliasId is not null && i.Id != _editingId)
-            .Select(i => i.AliasId!.Value)
-            .ToHashSet();
-        return _allAliases.Where(a => !taken.Contains(a.Id));
+        var addresses = _allAliases.Where(a => a.IdentityId == i.Id).Select(a => a.Address).ToList();
+        return addresses.Count == 0 ? "—" : string.Join(", ", addresses);
     }
 
     private void GenerateDraft()
@@ -215,15 +204,6 @@ else if (_identities.Count > 0)
     private void RegenUsername() => _draft.Username = Generator.NewUsername(_draft.FirstName, _draft.LastName);
 
     private void RegenPassword() => _draft.Password = Generator.NewPassword();
-
-    private void OnLinkChanged()
-    {
-        if (_draft.AliasId is long aid)
-        {
-            var alias = _allAliases.FirstOrDefault(a => a.Id == aid);
-            if (alias is not null) _draft.Email = alias.Address;
-        }
-    }
 
     private void OpenEdit(Identity i)
     {
@@ -292,7 +272,6 @@ else if (_identities.Count > 0)
     private static Identity Clone(Identity i) => new()
     {
         Id = i.Id,
-        AliasId = i.AliasId,
         Country = i.Country,
         Title = i.Title,
         Gender = i.Gender,

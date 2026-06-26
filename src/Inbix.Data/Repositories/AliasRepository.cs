@@ -8,7 +8,7 @@ public sealed class AliasRepository : IAliasRepository
 {
     private const string Columns =
         "id, local_part, domain, enabled, created_at, disabled_at, notes, is_catch_all, color, " +
-        "expiry_enabled, expiry_days, shortname, shortname_enabled";
+        "expiry_enabled, expiry_days, shortname, shortname_enabled, identity_id";
 
     private readonly IDbConnectionFactory _factory;
 
@@ -110,5 +110,22 @@ public sealed class AliasRepository : IAliasRepository
                 notes,
                 now = DateTimeOffset.UtcNow
             }).ConfigureAwait(false);
+    }
+
+    public async Task<Alias?> SetIdentityAsync(long id, long? identityId, CancellationToken ct = default)
+    {
+        await using var c = await _factory.OpenConnectionAsync(ct).ConfigureAwait(false);
+        return await c.QuerySingleOrDefaultAsync<Alias>(
+            $"UPDATE aliases SET identity_id = @identityId WHERE id = @id RETURNING {Columns};",
+            new { id, identityId }).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<Alias>> ListByIdentityAsync(long identityId, CancellationToken ct = default)
+    {
+        await using var c = await _factory.OpenConnectionAsync(ct).ConfigureAwait(false);
+        var rows = await c.QueryAsync<Alias>(
+            $"SELECT {Columns} FROM aliases WHERE identity_id = @identityId ORDER BY local_part, domain;",
+            new { identityId }).ConfigureAwait(false);
+        return rows.ToList();
     }
 }

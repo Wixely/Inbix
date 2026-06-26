@@ -29,6 +29,9 @@ public sealed class Alias
     /// <summary>When true (and a shortname is set), the mailbox shows as the shortname in the sidebar/inbox title.</summary>
     public bool ShortnameEnabled { get; set; }
 
+    /// <summary>The saved identity linked to this alias, if any. One identity may be shared by many aliases.</summary>
+    public long? IdentityId { get; set; }
+
     public string Address => $"{LocalPart}@{Domain}";
 
     /// <summary>What to label this mailbox with: the shortname when enabled/set, otherwise the address.</summary>

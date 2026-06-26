@@ -8,10 +8,7 @@ public interface IIdentityRepository
 
     Task<Identity?> GetByIdAsync(long id, CancellationToken ct = default);
 
-    /// <summary>The identity linked to an alias, or null. (alias_id is unique, so at most one.)</summary>
-    Task<Identity?> GetByAliasIdAsync(long aliasId, CancellationToken ct = default);
-
-    /// <summary>Insert a new identity. Returns the created row. Throws on a duplicate alias link.</summary>
+    /// <summary>Insert a new identity. Returns the created row.</summary>
     Task<Identity> CreateAsync(Identity identity, CancellationToken ct = default);
 
     /// <summary>Update all editable fields by <see cref="Identity.Id"/>. Returns the row, or null if missing.</summary>
