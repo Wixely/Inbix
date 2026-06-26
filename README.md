@@ -10,6 +10,21 @@ It **never sends mail** — it only receives, stores, and lets you read.
 
 ---
 
+## Screenshots
+
+| | |
+|:--:|:--:|
+| Recent-mail dashboard | Mailbox with a message open |
+| ![Dashboard](docs/screenshots/dashboard.png) | ![Mailbox](docs/screenshots/inbox.png) |
+| Aliases — per-mailbox colour, shortname &amp; expiry | Rules — sender/recipient blacklisting |
+| ![Aliases](docs/screenshots/aliases.png) | ![Rules](docs/screenshots/rules.png) |
+| Junk inbox — rule-tagged, with manual overrides | Status — configuration &amp; DNS diagnostics |
+| ![Junk](docs/screenshots/junk.png) | ![Status](docs/screenshots/status.png) |
+
+> Screenshots use the built-in sample data (`Inbix:SeedSampleData=true`).
+
+---
+
 ## Features
 
 - Custom SMTP receiver (port 25) built on the [`SmtpServer`](https://github.com/cosullivan/SmtpServer) library,
