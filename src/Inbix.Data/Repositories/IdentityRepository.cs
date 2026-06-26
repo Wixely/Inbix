@@ -7,7 +7,7 @@ namespace Inbix.Data.Repositories;
 public sealed class IdentityRepository : IIdentityRepository
 {
     private const string Columns =
-        "id, alias_id, country, title, gender, first_name, last_name, username, password, " +
+        "id, country, title, gender, first_name, last_name, username, password, " +
         "date_of_birth, email, phone, street, city, state_county, postcode, " +
         "security_question, security_answer, notes, created_at";
 
@@ -30,13 +30,6 @@ public sealed class IdentityRepository : IIdentityRepository
             $"SELECT {Columns} FROM identities WHERE id = @id;", new { id }).ConfigureAwait(false);
     }
 
-    public async Task<Identity?> GetByAliasIdAsync(long aliasId, CancellationToken ct = default)
-    {
-        await using var c = await _factory.OpenConnectionAsync(ct).ConfigureAwait(false);
-        return await c.QuerySingleOrDefaultAsync<Identity>(
-            $"SELECT {Columns} FROM identities WHERE alias_id = @aliasId;", new { aliasId }).ConfigureAwait(false);
-    }
-
     public async Task<Identity> CreateAsync(Identity identity, CancellationToken ct = default)
     {
         identity.CreatedAt = DateTimeOffset.UtcNow;
@@ -46,11 +39,11 @@ public sealed class IdentityRepository : IIdentityRepository
         return await c.QuerySingleAsync<Identity>(
             $"""
              INSERT INTO identities
-                 (alias_id, country, title, gender, first_name, last_name, username, password,
+                 (country, title, gender, first_name, last_name, username, password,
                   date_of_birth, email, phone, street, city, state_county, postcode,
                   security_question, security_answer, notes, created_at)
              VALUES
-                 (@AliasId, @Country, @Title, @Gender, @FirstName, @LastName, @Username, @Password,
+                 (@Country, @Title, @Gender, @FirstName, @LastName, @Username, @Password,
                   @DateOfBirth, @Email, @Phone, @Street, @City, @StateCounty, @Postcode,
                   @SecurityQuestion, @SecurityAnswer, @Notes, @CreatedAt)
              RETURNING {Columns};
@@ -63,7 +56,7 @@ public sealed class IdentityRepository : IIdentityRepository
         return await c.QuerySingleOrDefaultAsync<Identity>(
             $"""
              UPDATE identities SET
-                 alias_id = @AliasId, country = @Country, title = @Title, gender = @Gender,
+                 country = @Country, title = @Title, gender = @Gender,
                  first_name = @FirstName, last_name = @LastName, username = @Username, password = @Password,
                  date_of_birth = @DateOfBirth, email = @Email, phone = @Phone,
                  street = @Street, city = @City, state_county = @StateCounty, postcode = @Postcode,

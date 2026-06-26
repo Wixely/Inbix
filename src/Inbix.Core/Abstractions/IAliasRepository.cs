@@ -31,4 +31,10 @@ public interface IAliasRepository
 
     /// <summary>Delete an alias (no-op for the catch-all). Callers should reassign its messages first.</summary>
     Task DeleteAsync(long id, CancellationToken ct = default);
+
+    /// <summary>Link this alias to an identity (or unlink with null). Returns the updated row, or null.</summary>
+    Task<Alias?> SetIdentityAsync(long id, long? identityId, CancellationToken ct = default);
+
+    /// <summary>All aliases currently linked to the given identity.</summary>
+    Task<IReadOnlyList<Alias>> ListByIdentityAsync(long identityId, CancellationToken ct = default);
 }

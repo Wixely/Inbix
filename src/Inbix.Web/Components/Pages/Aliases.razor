@@ -144,7 +144,7 @@ else
     [SupplyParameterFromQuery(Name = "notes")] public string? PrefillNotes { get; set; }
 
     private IReadOnlyList<Alias>? _aliases;
-    private Dictionary<long, Identity> _identitiesByAlias = [];
+    private Dictionary<long, Identity> _identitiesById = [];
     private List<string> _domains = [];
 
     private bool _creating;
@@ -242,7 +242,7 @@ else
 
     // Small chip in the address cell linking to the saved identity for this alias, when one exists.
     private RenderFragment IdentityChip(Alias a) => @<span>
-        @if (_identitiesByAlias.TryGetValue(a.Id, out var id))
+        @if (a.IdentityId is long iid && _identitiesById.TryGetValue(iid, out var id))
         {
             <a class="id-chip" href="identities" title="@($"Linked identity: {id.FullName}")">@id.FullName</a>
         }
@@ -440,9 +440,7 @@ else
     private async Task ReloadAsync()
     {
         _aliases = await AliasRepo.ListAsync();
-        _identitiesByAlias = (await IdentityRepo.ListAsync())
-            .Where(i => i.AliasId is not null)
-            .ToDictionary(i => i.AliasId!.Value);
+        _identitiesById = (await IdentityRepo.ListAsync()).ToDictionary(i => i.Id);
     }
 
     private void OpenCreate()

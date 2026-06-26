@@ -12,8 +12,9 @@ public interface IIdentityService
     Task DeleteAsync(long id, CancellationToken ct = default);
 
     /// <summary>
-    /// Link the identity to an alias (or unlink with <paramref name="aliasId"/> = null). When linking,
-    /// the identity's email is auto-filled from the alias address. Returns the updated row, or null.
+    /// Link an alias to an identity, or unlink the alias when <paramref name="identityId"/> is null.
+    /// One identity may be linked to many aliases. Returns the identity now linked to the alias
+    /// (null when unlinked).
     /// </summary>
-    Task<Identity?> LinkAsync(long id, long? aliasId, CancellationToken ct = default);
+    Task<Identity?> LinkAliasAsync(long aliasId, long? identityId, CancellationToken ct = default);
 }

@@ -101,63 +101,64 @@ public sealed class IdentityTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
-    public async Task Link_Sets_Email_And_GetByAlias_Works()
+    public async Task Identity_Can_Link_To_Multiple_Aliases()
     {
         var aliases = _sp.GetRequiredService<IAliasRepository>();
-        var repo = _sp.GetRequiredService<IIdentityRepository>();
         var service = _sp.GetRequiredService<IIdentityService>();
 
-        var alias = await aliases.CreateAsync("spotify", "mydomain.com", null);
+        var a1 = await aliases.CreateAsync("spotify", "mydomain.com", null);
+        var a2 = await aliases.CreateAsync("netflix", "mydomain.com", null);
         var identity = await service.CreateAsync(new RandomIdentityGenerator().Generate(new GenerateOptions()));
 
-        var linked = await service.LinkAsync(identity.Id, alias.Id);
-        Assert.NotNull(linked);
-        Assert.Equal(alias.Id, linked!.AliasId);
-        Assert.Equal(alias.Address, linked.Email); // email auto-filled from the alias
+        await service.LinkAliasAsync(a1.Id, identity.Id);
+        await service.LinkAliasAsync(a2.Id, identity.Id);
 
-        var byAlias = await repo.GetByAliasIdAsync(alias.Id);
-        Assert.NotNull(byAlias);
-        Assert.Equal(identity.Id, byAlias!.Id);
-
-        var unlinked = await service.LinkAsync(identity.Id, null);
-        Assert.Null(unlinked!.AliasId);
-        Assert.Null(await repo.GetByAliasIdAsync(alias.Id));
+        var linked = await aliases.ListByIdentityAsync(identity.Id);
+        Assert.Equal(2, linked.Count);
+        Assert.Contains(linked, a => a.Id == a1.Id);
+        Assert.Contains(linked, a => a.Id == a2.Id);
+        Assert.Equal(identity.Id, (await aliases.GetByIdAsync(a1.Id))!.IdentityId);
     }
 
     [Fact]
-    public async Task Deleting_Alias_Unlinks_Identity_But_Keeps_It()
-    {
-        var aliases = _sp.GetRequiredService<IAliasRepository>();
-        var repo = _sp.GetRequiredService<IIdentityRepository>();
-        var service = _sp.GetRequiredService<IIdentityService>();
-
-        var alias = await aliases.CreateAsync("netflix", "mydomain.com", null);
-        var identity = await service.CreateAsync(new RandomIdentityGenerator().Generate(new GenerateOptions()));
-        await service.LinkAsync(identity.Id, alias.Id);
-
-        await aliases.DeleteAsync(alias.Id); // FK ON DELETE SET NULL
-
-        var survivor = await repo.GetByIdAsync(identity.Id);
-        Assert.NotNull(survivor);
-        Assert.Null(survivor!.AliasId); // unlinked, but the identity (and its details) survive
-    }
-
-    [Fact]
-    public async Task One_Identity_Per_Alias_Is_Enforced()
+    public async Task Alias_Holds_At_Most_One_Identity_And_Can_Be_Unlinked()
     {
         var aliases = _sp.GetRequiredService<IAliasRepository>();
         var service = _sp.GetRequiredService<IIdentityService>();
         var gen = new RandomIdentityGenerator();
 
         var alias = await aliases.CreateAsync("github", "mydomain.com", null);
+        var first = await service.CreateAsync(gen.Generate(new GenerateOptions()));
+        var second = await service.CreateAsync(gen.Generate(new GenerateOptions()));
 
-        var first = gen.Generate(new GenerateOptions());
-        first.AliasId = alias.Id;
-        await service.CreateAsync(first);
+        await service.LinkAliasAsync(alias.Id, first.Id);
+        Assert.Equal(first.Id, (await aliases.GetByIdAsync(alias.Id))!.IdentityId);
 
-        var second = gen.Generate(new GenerateOptions());
-        second.AliasId = alias.Id;
-        await Assert.ThrowsAnyAsync<Exception>(() => service.CreateAsync(second)); // UNIQUE(alias_id)
+        // Re-linking replaces — an alias points at one identity.
+        await service.LinkAliasAsync(alias.Id, second.Id);
+        Assert.Equal(second.Id, (await aliases.GetByIdAsync(alias.Id))!.IdentityId);
+
+        await service.LinkAliasAsync(alias.Id, null);
+        Assert.Null((await aliases.GetByIdAsync(alias.Id))!.IdentityId);
+    }
+
+    [Fact]
+    public async Task Deleting_Identity_Unlinks_Its_Aliases_But_Keeps_Them()
+    {
+        var aliases = _sp.GetRequiredService<IAliasRepository>();
+        var service = _sp.GetRequiredService<IIdentityService>();
+
+        var a1 = await aliases.CreateAsync("spotify", "mydomain.com", null);
+        var a2 = await aliases.CreateAsync("netflix", "mydomain.com", null);
+        var identity = await service.CreateAsync(new RandomIdentityGenerator().Generate(new GenerateOptions()));
+        await service.LinkAliasAsync(a1.Id, identity.Id);
+        await service.LinkAliasAsync(a2.Id, identity.Id);
+
+        await service.DeleteAsync(identity.Id); // FK ON DELETE SET NULL
+
+        Assert.NotNull(await aliases.GetByIdAsync(a1.Id));             // aliases survive
+        Assert.Null((await aliases.GetByIdAsync(a1.Id))!.IdentityId);  // but are unlinked
+        Assert.Null((await aliases.GetByIdAsync(a2.Id))!.IdentityId);
     }
 
     public Task DisposeAsync() => Task.CompletedTask;

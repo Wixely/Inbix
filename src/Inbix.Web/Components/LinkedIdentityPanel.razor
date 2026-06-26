@@ -1,5 +1,7 @@
-@* Linked-identity panel for an alias inbox: shows the linked identity (with copy), or controls to
-   generate-and-link a new one / link an existing unlinked identity. *@
+@* Linked-identity panel for an alias inbox: shows the identity linked to this alias (with copy), or
+   controls to generate-and-link a new one / link an existing identity. An identity may be shared by
+   several aliases, so "Link existing" offers every saved identity. *@
+@inject IAliasRepository AliasRepo
 @inject IIdentityRepository IdentityRepo
 @inject IIdentityService IdentityService
 @inject IIdentityGenerator Generator
@@ -19,6 +21,7 @@
     }
     else if (_identity is not null)
     {
+        <p class="muted id-panel-email">Email for this alias: <strong>@AliasAddress</strong></p>
         <IdentityDetails Identity="_identity" />
         <div class="btn-row">
             <button class="btn-ghost danger" @onclick="UnlinkAsync" disabled="@_busy">Unlink</button>
@@ -67,9 +70,10 @@
     private async Task LoadAsync()
     {
         _loading = true;
-        _identity = await IdentityRepo.GetByAliasIdAsync(AliasId);
+        var alias = await AliasRepo.GetByIdAsync(AliasId);
+        _identity = alias?.IdentityId is long iid ? await IdentityRepo.GetByIdAsync(iid) : null;
         if (_identity is null)
-            _linkable = (await IdentityRepo.ListAsync()).Where(i => i.AliasId is null).ToList();
+            _linkable = (await IdentityRepo.ListAsync()).ToList(); // any identity can be reused
         _loading = false;
     }
 
@@ -78,10 +82,9 @@
         _busy = true;
         try
         {
-            var draft = Generator.Generate(new Inbix.Core.Identities.GenerateOptions());
-            draft.AliasId = AliasId;
-            draft.Email = AliasAddress;
-            _identity = await IdentityService.CreateAsync(draft);
+            var created = await IdentityService.CreateAsync(Generator.Generate(new Inbix.Core.Identities.GenerateOptions()));
+            await IdentityService.LinkAliasAsync(AliasId, created.Id);
+            _identity = created;
         }
         finally { _busy = false; }
     }
@@ -92,7 +95,7 @@
         _busy = true;
         try
         {
-            _identity = await IdentityService.LinkAsync(id, AliasId);
+            _identity = await IdentityService.LinkAliasAsync(AliasId, id);
             _linkSel = string.Empty;
         }
         finally { _busy = false; }
@@ -100,11 +103,10 @@
 
     private async Task UnlinkAsync()
     {
-        if (_identity is null) return;
         _busy = true;
         try
         {
-            await IdentityService.LinkAsync(_identity.Id, null);
+            await IdentityService.LinkAliasAsync(AliasId, null);
             _identity = null;
             await LoadAsync();
         }
