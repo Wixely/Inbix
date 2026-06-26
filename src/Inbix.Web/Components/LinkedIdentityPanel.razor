@@ -1,0 +1,113 @@
+@* Linked-identity panel for an alias inbox: shows the linked identity (with copy), or controls to
+   generate-and-link a new one / link an existing unlinked identity. *@
+@inject IIdentityRepository IdentityRepo
+@inject IIdentityService IdentityService
+@inject IIdentityGenerator Generator
+
+<div class="panel identity-panel">
+    <div class="identity-panel-head">
+        <h2>Identity</h2>
+        @if (_identity is not null)
+        {
+            <a class="btn-link" href="identities">Manage</a>
+        }
+    </div>
+
+    @if (_loading)
+    {
+        <p class="muted">Loading…</p>
+    }
+    else if (_identity is not null)
+    {
+        <IdentityDetails Identity="_identity" />
+        <div class="btn-row">
+            <button class="btn-ghost danger" @onclick="UnlinkAsync" disabled="@_busy">Unlink</button>
+        </div>
+    }
+    else
+    {
+        <p class="muted">No identity linked to this alias yet.</p>
+        <div class="btn-row id-link-row">
+            <button class="btn btn-primary" @onclick="GenerateAndLinkAsync" disabled="@_busy">Generate &amp; link</button>
+            @if (_linkable.Count > 0)
+            {
+                <select class="input" @bind="_linkSel">
+                    <option value="">Link existing…</option>
+                    @foreach (var i in _linkable)
+                    {
+                        <option value="@i.Id">@i.FullName</option>
+                    }
+                </select>
+                <button class="btn-ghost" @onclick="LinkExistingAsync" disabled="@(_busy || string.IsNullOrEmpty(_linkSel))">Link</button>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public long AliasId { get; set; }
+    [Parameter] public string AliasAddress { get; set; } = string.Empty;
+
+    private Identity? _identity;
+    private List<Identity> _linkable = [];
+    private string _linkSel = string.Empty;
+    private bool _loading = true;
+    private bool _busy;
+    private long _loadedFor = -1;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (AliasId != _loadedFor)
+        {
+            _loadedFor = AliasId;
+            await LoadAsync();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _identity = await IdentityRepo.GetByAliasIdAsync(AliasId);
+        if (_identity is null)
+            _linkable = (await IdentityRepo.ListAsync()).Where(i => i.AliasId is null).ToList();
+        _loading = false;
+    }
+
+    private async Task GenerateAndLinkAsync()
+    {
+        _busy = true;
+        try
+        {
+            var draft = Generator.Generate(new Inbix.Core.Identities.GenerateOptions());
+            draft.AliasId = AliasId;
+            draft.Email = AliasAddress;
+            _identity = await IdentityService.CreateAsync(draft);
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task LinkExistingAsync()
+    {
+        if (!long.TryParse(_linkSel, out var id)) return;
+        _busy = true;
+        try
+        {
+            _identity = await IdentityService.LinkAsync(id, AliasId);
+            _linkSel = string.Empty;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task UnlinkAsync()
+    {
+        if (_identity is null) return;
+        _busy = true;
+        try
+        {
+            await IdentityService.LinkAsync(_identity.Id, null);
+            _identity = null;
+            await LoadAsync();
+        }
+        finally { _busy = false; }
+    }
+}

@@ -62,3 +62,42 @@ public sealed record JunkItemDto(long Id, string? Sender, string? Subject, strin
         new(j.Id, j.Sender, j.Subject, j.Recipient, j.ReceivedAt, j.Parsed,
             j.JunkedAt, j.JunkManual, j.JunkRuleId, j.JunkRuleName);
 }
+
+// --- Identities ---
+
+public sealed record GenerateIdentityRequest(bool? Uk, bool? Us);
+
+public sealed record LinkIdentityRequest(long? AliasId);
+
+/// <summary>Body for create (POST) and update (PATCH) — same editable shape.</summary>
+public sealed record SaveIdentityRequest(
+    long? AliasId, string Country, string? Title, string? Gender,
+    string FirstName, string LastName, string Username, string Password,
+    DateOnly DateOfBirth, string? Email, string? Phone,
+    string Street, string City, string? StateCounty, string Postcode,
+    string? SecurityQuestion, string? SecurityAnswer, string? Notes)
+{
+    public Identity ToDomain(long id = 0) => new()
+    {
+        Id = id, AliasId = AliasId, Country = Country, Title = Title, Gender = Gender,
+        FirstName = FirstName, LastName = LastName, Username = Username, Password = Password,
+        DateOfBirth = DateOfBirth, Email = Email, Phone = Phone,
+        Street = Street, City = City, StateCounty = StateCounty, Postcode = Postcode,
+        SecurityQuestion = SecurityQuestion, SecurityAnswer = SecurityAnswer, Notes = Notes
+    };
+}
+
+public sealed record IdentityDto(
+    long Id, long? AliasId, string Country, string? Title, string? Gender,
+    string FirstName, string LastName, string FullName, string Username, string Password,
+    DateOnly DateOfBirth, int AgeYears, string? Email, string? Phone,
+    string Street, string City, string? StateCounty, string Postcode, string FullAddress,
+    string? SecurityQuestion, string? SecurityAnswer, string? Notes, DateTimeOffset CreatedAt)
+{
+    public static IdentityDto From(Identity i) => new(
+        i.Id, i.AliasId, i.Country, i.Title, i.Gender,
+        i.FirstName, i.LastName, i.FullName, i.Username, i.Password,
+        i.DateOfBirth, i.AgeYears, i.Email, i.Phone,
+        i.Street, i.City, i.StateCounty, i.Postcode, i.FullAddress,
+        i.SecurityQuestion, i.SecurityAnswer, i.Notes, i.CreatedAt);
+}

@@ -643,3 +643,47 @@ select.input { cursor: pointer; }
 .st-warn { background: var(--amber-soft); color: var(--amber); border-color: rgba(245, 183, 61, 0.3); }
 .st-err { background: var(--coral-soft); color: var(--coral); border-color: rgba(240, 104, 96, 0.3); }
 .st-info { background: var(--violet-soft); color: var(--violet); border-color: rgba(139, 124, 246, 0.3); }
+
+/* ---------- Identities ---------- */
+
+.id-generator { margin-bottom: 1rem; }
+.id-gen-row { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+
+.id-form { margin-bottom: 1rem; }
+.id-form-head, .identity-panel-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; margin-bottom: 0.8rem;
+}
+.id-form-head h2, .identity-panel-head h2 { margin: 0; font-size: 1rem; }
+
+.id-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0.7rem; margin-bottom: 0.9rem;
+}
+.id-field { display: flex; flex-direction: column; gap: 0.25rem; }
+.id-field > span { font-size: 0.72rem; color: var(--muted); }
+.id-field-inline { display: flex; align-items: center; gap: 0.4rem; }
+.id-field-wide { grid-column: 1 / -1; }
+
+.id-details {
+    display: grid; grid-template-columns: max-content 1fr; gap: 0.4rem 0.9rem; align-items: baseline;
+}
+.id-row { display: contents; }
+.id-key { color: var(--muted); font-size: 0.78rem; }
+.id-val {
+    font-family: var(--font-mono); font-size: 0.82rem;
+    display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; word-break: break-word;
+}
+.id-secret { font-family: var(--font-mono); letter-spacing: 0.06em; }
+
+.copy-btn { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em; }
+
+.identity-panel { margin-bottom: 1rem; }
+.id-link-row { flex-wrap: wrap; }
+.id-expand-row > td { background: var(--panel-2); }
+
+.id-chip {
+    display: inline-block; margin-left: 0.5rem; vertical-align: middle; text-decoration: none;
+    font-size: 0.7rem; padding: 0.05rem 0.45rem; border-radius: 999px;
+    background: var(--violet-soft); color: var(--violet); border: 1px solid rgba(139, 124, 246, 0.3);
+}
+.id-chip:hover { border-color: var(--violet); }

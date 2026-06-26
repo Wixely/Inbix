@@ -4,3 +4,4 @@
 004_rules_junk.sql
 005_alias_expiry.sql
 006_alias_shortname.sql
+007_identities.sql

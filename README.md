@@ -35,6 +35,8 @@ It **never sends mail** — it only receives, stores, and lets you read.
   (`IDbConnectionFactory`) so an external database (Postgres/SQL Server) can be added without touching callers.
 - Raw MIME and attachments are stored on disk (keeps the database small; parsing can be re-run from source).
 - Blazor admin UI + JSON API (dashboard, aliases, inbox, message viewer with sandboxed HTML, audit log).
+- **Identities**: generate fake registration identities offline (UK/US) — username, password, address,
+  DOB, phone, security Q&A — and link one to an alias to keep that email's sign-up details together.
 
 ## Architecture
 
@@ -135,6 +137,14 @@ POST   /api/aliases                 { "localPart": "spotify", "domain": null, "n
 GET    /api/aliases/{id}
 PATCH  /api/aliases/{id}            { "enabled": false, "notes": "..." }
 GET    /api/aliases/{id}/messages
+GET    /api/identities
+POST   /api/identities              { "country": "uk", "firstName": "...", "username": "...", ... }
+POST   /api/identities/generate     { "uk": true, "us": false }   (returns an unsaved draft)
+GET    /api/identities/{id}
+GET    /api/identities/by-alias/{aliasId}
+PATCH  /api/identities/{id}
+POST   /api/identities/{id}/link    { "aliasId": 42 }            (null aliasId to unlink)
+DELETE /api/identities/{id}
 GET    /api/messages/{id}
 GET    /api/messages/{id}/raw       (downloads .eml)
 GET    /api/messages/{id}/attachments
@@ -203,6 +213,20 @@ mailbox on the **Aliases** page. Retention is measured from a message's **last s
 (junk/unjunk/sweep/unsweep) or, if it was never moved, its received date. Enabling expiry shows a
 warning with the count and a preview of the mail that will be deleted (recycling the Sweep preview).
 The same daily job that prunes Junk (`Inbix:Junk:CleanupIntervalHours`) applies these expiries.
+
+## Identities
+
+The **Identities** page (`/identities`) generates believable, **offline** sign-up identities (no
+external service) so you have consistent fake details for each registration — and can retrieve them
+later. Tick **UK** and/or **US** to choose which pools to randomise from, then **Generate**: full name,
+username, strong password, full address, adult date of birth, phone, and a security question/answer.
+Edit any field (with per-field re-roll for username/password) and **Save**.
+
+Link an identity **1:1 to an alias** and its email auto-fills from the alias address; the linked
+identity then appears on that alias's inbox with copy buttons (the password is masked behind a reveal
+toggle). Deleting an alias unlinks its identity but keeps it. Identities — including passwords — are
+stored in the database in clear text so they can be retrieved, so treat the database and backups as
+secrets (see [Security notes](#security-notes)).
 
 ## Backups & restore
 

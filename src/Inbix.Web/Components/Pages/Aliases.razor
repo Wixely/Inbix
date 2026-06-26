@@ -6,6 +6,7 @@
 @inject IAuditRepository Audit
 @inject IOptions<InbixOptions> Options
 @inject AliasChangeNotifier Notifier
+@inject IIdentityRepository IdentityRepo
 
 <div class="page-head">
     <h1>Aliases</h1>
@@ -69,7 +70,7 @@ else
                 else
                 {
                     <tr>
-                        <td>@ColorPicker(a)<a href="@($"aliases/{a.Id}/inbox")">@a.Address</a></td>
+                        <td>@ColorPicker(a)<a href="@($"aliases/{a.Id}/inbox")">@a.Address</a>@IdentityChip(a)</td>
                         <td>
                             <label class="switch" title="@(a.Enabled ? "Click to disable" : "Click to enable")">
                                 <input type="checkbox" checked="@a.Enabled" @onchange="() => ToggleAsync(a)" />
@@ -143,6 +144,7 @@ else
     [SupplyParameterFromQuery(Name = "notes")] public string? PrefillNotes { get; set; }
 
     private IReadOnlyList<Alias>? _aliases;
+    private Dictionary<long, Identity> _identitiesByAlias = [];
     private List<string> _domains = [];
 
     private bool _creating;
@@ -235,6 +237,14 @@ else
                             @onclick="() => SetColorAsync(a, c)"></button>
                 }
             </div>
+        }
+    </span>;
+
+    // Small chip in the address cell linking to the saved identity for this alias, when one exists.
+    private RenderFragment IdentityChip(Alias a) => @<span>
+        @if (_identitiesByAlias.TryGetValue(a.Id, out var id))
+        {
+            <a class="id-chip" href="identities" title="@($"Linked identity: {id.FullName}")">@id.FullName</a>
         }
     </span>;
 
@@ -427,7 +437,13 @@ else
         if (!string.IsNullOrWhiteSpace(notes)) _formNotes = notes;
     }
 
-    private async Task ReloadAsync() => _aliases = await AliasRepo.ListAsync();
+    private async Task ReloadAsync()
+    {
+        _aliases = await AliasRepo.ListAsync();
+        _identitiesByAlias = (await IdentityRepo.ListAsync())
+            .Where(i => i.AliasId is not null)
+            .ToDictionary(i => i.AliasId!.Value);
+    }
 
     private void OpenCreate()
     {

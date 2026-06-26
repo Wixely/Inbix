@@ -204,8 +204,9 @@ and restarting Inbix.
 - Always set an admin password *before* the host is reachable. A startup warning is logged if none is set.
 - Keep the web UI off the public internet — VPN or reverse proxy + HTTPS only. Port 25 is the only
   port that needs to face the world.
-- Inbix can hold password-reset and account-recovery mail. Treat the database and backups as secrets:
-  encrypt backups and restrict who can read `/data`.
+- Inbix can hold password-reset and account-recovery mail, plus any saved **Identities** (whose
+  passwords are stored in clear text so they can be retrieved). Treat the database and backups as
+  secrets: encrypt backups and restrict who can read `/data`.
 
 **Receiving reliably**
 - Run on a host with a clean IP. Some senders consult DNS blocklists (DNSBLs); a previously-abused
