@@ -1,4 +1,5 @@
 using Inbix.Core.Abstractions;
+using Inbix.Core.Domain;
 using Inbix.Core.Options;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -16,15 +17,17 @@ namespace Inbix.Smtp;
 public sealed class AliasMailboxFilter : MailboxFilter
 {
     private readonly IAliasResolver _resolver;
+    private readonly IBlacklistMatcher _matcher;
     private readonly SmtpConnectionGovernor _governor;
     private readonly SmtpOptions _smtp;
     private readonly ILogger<AliasMailboxFilter> _logger;
 
     public AliasMailboxFilter(
-        IAliasResolver resolver, SmtpConnectionGovernor governor,
+        IAliasResolver resolver, IBlacklistMatcher matcher, SmtpConnectionGovernor governor,
         IOptions<InbixOptions> options, ILogger<AliasMailboxFilter> logger)
     {
         _resolver = resolver;
+        _matcher = matcher;
         _governor = governor;
         _smtp = options.Value.Smtp;
         _logger = logger;
@@ -52,6 +55,20 @@ public sealed class AliasMailboxFilter : MailboxFilter
         ISessionContext context, IMailbox to, IMailbox from, CancellationToken cancellationToken)
     {
         var address = $"{to.User}@{to.Host}";
-        return await _resolver.IsDeliverableAsync(address, cancellationToken).ConfigureAwait(false);
+        if (!await _resolver.IsDeliverableAsync(address, cancellationToken).ConfigureAwait(false))
+            return false;
+
+        // A blacklist 'reject' rule (on sender or recipient) bounces the recipient here with 550.
+        // 'discard' / 'junk' rules accept at SMTP and are applied later in the message sink.
+        var sender = from is { } f && (f.User.Length > 0 || f.Host.Length > 0) ? $"{f.User}@{f.Host}" : null;
+        var match = await _matcher.MatchAsync(sender, address, cancellationToken).ConfigureAwait(false);
+        if (match is { Action: RuleAction.Reject })
+        {
+            _logger.LogInformation("Rejecting mail to {Recipient} from {Sender}: blacklist rule {RuleId}",
+                address, sender ?? "(empty)", match.Value.RuleId);
+            return false;
+        }
+
+        return true;
     }
 }

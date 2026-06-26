@@ -115,6 +115,8 @@ builder.Services.ConfigureHttpJsonOptions(o =>
 
 // Notifies the sidebar to refresh its inbox list when aliases change (per-circuit).
 builder.Services.AddScoped<Inbix.Web.Services.AliasChangeNotifier>();
+// Notifies the sidebar when a setting that affects it changes (e.g. Junk-inbox visibility).
+builder.Services.AddScoped<Inbix.Web.Services.SettingsChangeNotifier>();
 
 // Web: API + Blazor UI.
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();

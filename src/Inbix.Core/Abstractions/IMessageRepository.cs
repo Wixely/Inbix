@@ -39,4 +39,27 @@ public interface IMessageRepository
 
     /// <summary>Move all messages from one alias to another (e.g. a deleted alias → catch-all). Returns the number moved.</summary>
     Task<int> ReassignAllAsync(long fromAliasId, long toAliasId, CancellationToken ct = default);
+
+    // --- Junk inbox + blacklist sweep ---
+
+    /// <summary>List junked messages (junked_at not null) with a snippet and the junking rule's name, for the Junk inbox.</summary>
+    Task<IReadOnlyList<JunkItem>> ListJunkWithPreviewAsync(int limit, int offset, CancellationToken ct = default);
+
+    /// <summary>Set a message's junk state.</summary>
+    Task SetJunkAsync(long messageId, DateTimeOffset junkedAt, long? ruleId, bool manual, CancellationToken ct = default);
+
+    /// <summary>Clear a message's junk state (restore to its home inbox); <paramref name="manual"/> sets the lock flag.</summary>
+    Task ClearJunkAsync(long messageId, bool manual, CancellationToken ct = default);
+
+    /// <summary>All sweep-eligible messages (not junked, not manual-locked) with enough to match a rule and preview it.</summary>
+    Task<IReadOnlyList<SweepCandidate>> ListSweepCandidatesAsync(CancellationToken ct = default);
+
+    /// <summary>Restore mail junked by a rule (skipping manual-locked) back to its home inbox. Returns count.</summary>
+    Task<int> UnsweepByRuleAsync(long ruleId, CancellationToken ct = default);
+
+    /// <summary>Ids of junked messages whose junked_at is older than the cutoff (for retention cleanup).</summary>
+    Task<IReadOnlyList<long>> ListJunkedBeforeAsync(DateTimeOffset cutoff, CancellationToken ct = default);
+
+    /// <summary>Hard-delete a message and its body/attachments rows plus the raw + attachment files.</summary>
+    Task DeleteAsync(long messageId, CancellationToken ct = default);
 }

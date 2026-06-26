@@ -51,12 +51,17 @@ public static class DependencyInjection
         services.AddSingleton<IMessageRepository, MessageRepository>();
         services.AddSingleton<ISmtpSessionRepository, SmtpSessionRepository>();
         services.AddSingleton<IAuditRepository, AuditRepository>();
+        services.AddSingleton<IBlacklistRuleRepository, BlacklistRuleRepository>();
+        services.AddSingleton<ISettingsRepository, SettingsRepository>();
+        services.AddSingleton<IBlacklistMatcher, CachingBlacklistMatcher>();
+        services.AddSingleton<IBlacklistService, BlacklistService>();
 
         services.AddSingleton<IRawMessageStore, FileSystemRawMessageStore>();
         services.AddSingleton<IAliasResolver, CachingAliasResolver>();
         services.AddSingleton<IInboundMessageSink, InboundMessageSink>();
         services.AddSingleton<IBackupService, SqliteBackupService>();
         services.AddHostedService<BackupHostedService>();
+        services.AddHostedService<JunkCleanupHostedService>();
 
         return services;
     }

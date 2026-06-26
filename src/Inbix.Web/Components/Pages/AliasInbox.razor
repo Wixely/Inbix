@@ -53,7 +53,7 @@ else
                     </div>
                 }
                 <div class="msg-scroll">
-                    <MessageView MessageId="@_selectedId.Value" />
+                    <MessageView MessageId="@_selectedId.Value" IsCatchAll="@_alias.IsCatchAll" OnChanged="OnMessageChangedAsync" />
                 </div>
             }
         </Preview>
@@ -84,6 +84,14 @@ else
         if (string.IsNullOrWhiteSpace(recipient)) return;
         var url = $"aliases?new={Uri.EscapeDataString(recipient)}&notes={Uri.EscapeDataString("(Quick Alias)")}";
         Nav.NavigateTo(url);
+    }
+
+    // After a junk/unjunk in the reader, reload the list (junked mail leaves this inbox) and keep a valid selection.
+    private async Task OnMessageChangedAsync()
+    {
+        _items = await Messages.ListByAliasWithPreviewAsync(AliasId, 100, 0);
+        if (_selectedId is long sid && _items.All(i => i.Id != sid))
+            _selectedId = _items.Count > 0 ? _items[0].Id : null;
     }
 
     protected override async Task OnParametersSetAsync()

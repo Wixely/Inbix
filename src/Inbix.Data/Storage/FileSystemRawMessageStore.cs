@@ -43,6 +43,23 @@ public sealed class FileSystemRawMessageStore : IRawMessageStore
         return Task.FromResult(stream);
     }
 
+    public Task DeleteAsync(string storagePath, CancellationToken ct = default)
+    {
+        if (!string.IsNullOrWhiteSpace(storagePath))
+        {
+            try
+            {
+                var full = ResolveInsideRoot(storagePath);
+                if (File.Exists(full)) File.Delete(full);
+            }
+            catch
+            {
+                // Best-effort: a missing or locked file must not block message deletion.
+            }
+        }
+        return Task.CompletedTask;
+    }
+
     private async Task WriteAsync(string relativePath, ReadOnlyMemory<byte> bytes, CancellationToken ct)
     {
         var full = ResolveInsideRoot(relativePath);

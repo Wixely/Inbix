@@ -2,6 +2,7 @@
 @rendermode InteractiveServer
 @inject IAliasRepository AliasRepo
 @inject IAliasService AliasService
+@inject IBlacklistService Blacklist
 @inject IAuditRepository Audit
 @inject IOptions<InbixOptions> Options
 @inject AliasChangeNotifier Notifier
@@ -80,8 +81,11 @@ else
                             @if (_confirmingDeleteId == a.Id)
                             {
                                 <span class="muted" title="Its mail moves to the catch-all.">Delete?</span>
+                                <label class="block-on-delete muted" title="Add a junk rule for this address so future mail to it is filtered out of the catch-all.">
+                                    <input type="checkbox" @bind="_blockOnDelete" /> block
+                                </label>
                                 <button class="btn-link danger" @onclick="() => DeleteAsync(a)" disabled="@_busy">Yes</button>
-                                <button class="btn-link" @onclick="() => _confirmingDeleteId = null" disabled="@_busy">No</button>
+                                <button class="btn-link" @onclick="() => CancelDelete()" disabled="@_busy">No</button>
                             }
                             else
                             {
@@ -112,6 +116,7 @@ else
     private bool _creating;
     private long? _editingId;
     private long? _confirmingDeleteId;
+    private bool _blockOnDelete;
     private long? _pickerForId;
 
     // 24-colour accent palette; the first entry (violet) is the default applied to new aliases.
@@ -307,6 +312,12 @@ else
         Notifier.NotifyChanged();
     }
 
+    private void CancelDelete()
+    {
+        _confirmingDeleteId = null;
+        _blockOnDelete = false;
+    }
+
     private async Task DeleteAsync(Alias a)
     {
         _busy = true;
@@ -314,10 +325,27 @@ else
         {
             var moved = await AliasService.DeleteAsync(a.Id);
             await Audit.WriteAsync(new AuditEntry { Action = "alias.delete", TargetType = "alias", TargetId = a.Id.ToString(), Actor = "ui", CreatedAt = DateTimeOffset.UtcNow });
+
+            var blocked = _blockOnDelete;
+            if (blocked)
+            {
+                await Blacklist.CreateAsync(new BlacklistRule
+                {
+                    Name = $"Blocked {a.Address}",
+                    Target = RuleTarget.Recipient,
+                    MatchType = RuleMatch.Literal,
+                    Pattern = a.Address,
+                    Action = RuleAction.Junk,
+                    Enabled = true
+                });
+            }
+
             _confirmingDeleteId = null;
-            _flash = moved > 0
-                ? $"Deleted {a.Address} and moved {moved} message(s) to the catch-all."
-                : $"Deleted {a.Address}.";
+            _blockOnDelete = false;
+            var movedNote = moved > 0 ? $" and moved {moved} message(s) to the catch-all" : "";
+            _flash = blocked
+                ? $"Deleted {a.Address}{movedNote}; future mail to it will be junked."
+                : $"Deleted {a.Address}{movedNote}.";
             await ReloadAsync();
             Notifier.NotifyChanged();
         }

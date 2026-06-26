@@ -1,0 +1,351 @@
+@page "/rules"
+@rendermode InteractiveServer
+@inject IBlacklistRuleRepository RuleRepo
+@inject IBlacklistService Blacklist
+@inject ISettingsRepository Settings
+@inject SettingsChangeNotifier SettingsNotifier
+
+<div class="page-head">
+    <h1>Rules</h1>
+    <button class="btn btn-primary" @onclick="OpenCreate" disabled="@_creating">+ New rule</button>
+</div>
+
+<p class="muted page-note">
+    Blacklist incoming mail by <strong>sender</strong> or <strong>recipient</strong>, matched as a literal
+    string or a regular expression. <strong>Reject</strong> bounces it (550), <strong>Discard</strong>
+    accepts then drops it, <strong>Junk</strong> files it in the hidden Junk inbox. Rules apply to new mail
+    within ~30&nbsp;seconds; use <strong>Sweep</strong> to apply a rule to existing mail.
+</p>
+
+<div class="rules-toolbar">
+    <label class="switch" title="Show the Junk inbox in the sidebar">
+        <input type="checkbox" checked="@_showJunk" @onchange="ToggleJunkVisibilityAsync" />
+        <span class="slider"></span>
+        <span class="switch-label">Show Junk inbox in sidebar</span>
+    </label>
+</div>
+
+@if (_flash is not null)
+{
+    <p class="flash">@_flash</p>
+}
+
+@if (_rules is null)
+{
+    <p>Loading…</p>
+}
+else
+{
+    <table class="grid">
+        <thead>
+            <tr>
+                <th>Name</th><th>Target</th><th>Match</th><th>Pattern</th><th>Action</th><th>Status</th>
+                <th class="actions-col"></th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (_creating)
+            {
+                @EditorRow
+            }
+
+            @if (_rules.Count == 0 && !_creating)
+            {
+                <tr><td colspan="7" class="muted empty-row">No rules yet — click “New rule” to add one.</td></tr>
+            }
+
+            @foreach (var r in _rules)
+            {
+                @if (_editingId == r.Id)
+                {
+                    @EditorRow
+                }
+                else
+                {
+                    <tr>
+                        <td>@(string.IsNullOrWhiteSpace(r.Name) ? "—" : r.Name)</td>
+                        <td>@r.Target</td>
+                        <td>@r.MatchType</td>
+                        <td class="rule-pattern" title="@r.Pattern">@r.Pattern</td>
+                        <td><span class="badge @ActionClass(r.Action)">@r.Action</span></td>
+                        <td>
+                            <label class="switch" title="@(r.Enabled ? "Click to disable" : "Click to enable")">
+                                <input type="checkbox" checked="@r.Enabled" @onchange="() => ToggleAsync(r)" />
+                                <span class="slider"></span>
+                                <span class="switch-label">@(r.Enabled ? "Enabled" : "Disabled")</span>
+                            </label>
+                        </td>
+                        <td class="row-actions">
+                            @if (_confirmingDeleteId == r.Id)
+                            {
+                                <span class="muted">Delete?</span>
+                                <label class="block-on-delete muted" title="Restore mail this rule junked back to its inbox.">
+                                    <input type="checkbox" @bind="_unsweepOnDelete" /> unsweep
+                                </label>
+                                <button class="btn-link danger" @onclick="() => DeleteAsync(r)" disabled="@_busy">Yes</button>
+                                <button class="btn-link" @onclick="CancelDelete" disabled="@_busy">No</button>
+                            }
+                            else
+                            {
+                                <button class="btn-link" @onclick="() => OpenSweepAsync(r)" disabled="@_busy">Sweep</button>
+                                <button class="btn-link" @onclick="() => OpenEdit(r)">Edit</button>
+                                <button class="btn-link danger" @onclick="() => _confirmingDeleteId = r.Id">Delete</button>
+                            }
+                        </td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+}
+
+@if (_previewForId is not null)
+{
+    <div class="panel sweep-preview">
+        <div class="sweep-preview-head">
+            <h2>Sweep preview</h2>
+            <button class="btn-ghost" @onclick="CancelSweep" disabled="@_busy">Close</button>
+        </div>
+        @if (_preview is null)
+        {
+            <p class="muted">Scanning mail…</p>
+        }
+        else if (_preview.Count == 0)
+        {
+            <p class="muted">No stored mail matches this rule.</p>
+        }
+        else
+        {
+            <p class="muted">
+                <strong>@_preview.Count</strong> message(s) will be moved to Junk@(_preview.Count > _preview.Sample.Count ? $" (showing the first {_preview.Sample.Count})" : "").
+            </p>
+            <div class="sweep-cards">
+                @foreach (var m in _preview.Sample)
+                {
+                    <a class="sweep-card" href="@($"aliases/{m.AliasId}/inbox?m={m.Id}")" target="_blank">
+                        <div class="sweep-card-from">@(string.IsNullOrWhiteSpace(m.Sender) ? "(unknown sender)" : m.Sender)</div>
+                        <div class="sweep-card-subj">@(string.IsNullOrWhiteSpace(m.Subject) ? "(no subject)" : m.Subject)</div>
+                        <div class="sweep-card-meta">@m.Recipient <span class="when-sep">&middot;</span> @TimeFormat.Timestamp(m.ReceivedAt)</div>
+                    </a>
+                }
+            </div>
+            <div class="btn-row">
+                <button class="btn btn-primary" @onclick="ConfirmSweepAsync" disabled="@_busy">Move @_preview.Count to Junk</button>
+                <button class="btn-ghost" @onclick="CancelSweep" disabled="@_busy">Cancel</button>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "target")] public string? PrefillTarget { get; set; }
+    [SupplyParameterFromQuery(Name = "match")] public string? PrefillMatch { get; set; }
+    [SupplyParameterFromQuery(Name = "pattern")] public string? PrefillPattern { get; set; }
+    [SupplyParameterFromQuery(Name = "action")] public string? PrefillAction { get; set; }
+
+    private IReadOnlyList<BlacklistRule>? _rules;
+    private bool _showJunk;
+
+    private bool _creating;
+    private long? _editingId;
+    private long? _confirmingDeleteId;
+    private bool _unsweepOnDelete;
+    private bool _busy;
+    private string? _error;
+    private string? _flash;
+
+    private string _formName = string.Empty;
+    private RuleTarget _formTarget = RuleTarget.Sender;
+    private RuleMatch _formMatch = RuleMatch.Literal;
+    private string _formPattern = string.Empty;
+    private RuleAction _formAction = RuleAction.Junk;
+    private bool _formEnabled = true;
+
+    private long? _previewForId;
+    private SweepPreview? _preview;
+
+    private RenderFragment EditorRow => @<tr class="edit-row">
+        <td colspan="7">
+            <div class="form-row">
+                <input class="input" placeholder="name (optional)" @bind="_formName" />
+                <select class="input" @bind="_formTarget">
+                    <option value="Sender">Sender</option>
+                    <option value="Recipient">Recipient</option>
+                </select>
+                <select class="input" @bind="_formMatch">
+                    <option value="Literal">Literal</option>
+                    <option value="Regex">Regex</option>
+                </select>
+                <input class="input grow" @bind="_formPattern"
+                       placeholder="@(_formMatch == RuleMatch.Regex ? "regex, e.g. .*spam\\.com" : "address or text, e.g. ads.example.com")" />
+                <select class="input" @bind="_formAction">
+                    <option value="Reject">Reject (550)</option>
+                    <option value="Discard">Discard</option>
+                    <option value="Junk">Junk</option>
+                </select>
+                <button class="btn btn-primary" @onclick="SaveAsync" disabled="@_busy">@(_editingId is null ? "Create" : "Save")</button>
+                <button class="btn-ghost" @onclick="Cancel" disabled="@_busy">Cancel</button>
+            </div>
+            @if (_error is not null)
+            {
+                <p class="error inline-error">@_error</p>
+            }
+        </td>
+    </tr>;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ReloadAsync();
+        _showJunk = await Settings.GetBoolAsync(SettingKeys.ShowJunkInbox);
+
+        if (!string.IsNullOrWhiteSpace(PrefillPattern))
+        {
+            OpenCreate();
+            _formPattern = PrefillPattern;
+            if (Enum.TryParse<RuleTarget>(PrefillTarget, ignoreCase: true, out var t)) _formTarget = t;
+            if (Enum.TryParse<RuleMatch>(PrefillMatch, ignoreCase: true, out var m)) _formMatch = m;
+            if (Enum.TryParse<RuleAction>(PrefillAction, ignoreCase: true, out var a)) _formAction = a;
+        }
+    }
+
+    private async Task ReloadAsync() => _rules = await RuleRepo.ListAsync();
+
+    private void OpenCreate()
+    {
+        _editingId = null;
+        _creating = true;
+        _formName = string.Empty;
+        _formTarget = RuleTarget.Sender;
+        _formMatch = RuleMatch.Literal;
+        _formPattern = string.Empty;
+        _formAction = RuleAction.Junk;
+        _formEnabled = true;
+        _error = null;
+    }
+
+    private void OpenEdit(BlacklistRule r)
+    {
+        _creating = false;
+        _editingId = r.Id;
+        _formName = r.Name ?? string.Empty;
+        _formTarget = r.Target;
+        _formMatch = r.MatchType;
+        _formPattern = r.Pattern;
+        _formAction = r.Action;
+        _formEnabled = r.Enabled;
+        _error = null;
+    }
+
+    private void Cancel()
+    {
+        _creating = false;
+        _editingId = null;
+        _error = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        _error = Inbix.Core.Validation.BlacklistRules.ValidatePattern(_formMatch, _formPattern);
+        if (_error is not null) return;
+
+        _busy = true;
+        try
+        {
+            var rule = new BlacklistRule
+            {
+                Id = _editingId ?? 0,
+                Name = string.IsNullOrWhiteSpace(_formName) ? null : _formName.Trim(),
+                Target = _formTarget,
+                MatchType = _formMatch,
+                Pattern = _formPattern.Trim(),
+                Action = _formAction,
+                Enabled = _editingId is null || _formEnabled
+            };
+
+            if (_editingId is null)
+            {
+                var created = await Blacklist.CreateAsync(rule);
+                _flash = $"Created rule for {created.Pattern}.";
+            }
+            else
+            {
+                await Blacklist.UpdateAsync(rule);
+                _flash = "Rule updated.";
+            }
+
+            Cancel();
+            await ReloadAsync();
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task ToggleAsync(BlacklistRule r)
+    {
+        await RuleRepo.SetEnabledAsync(r.Id, !r.Enabled);
+        await ReloadAsync();
+    }
+
+    private void CancelDelete()
+    {
+        _confirmingDeleteId = null;
+        _unsweepOnDelete = false;
+    }
+
+    private async Task DeleteAsync(BlacklistRule r)
+    {
+        _busy = true;
+        try
+        {
+            var restored = await Blacklist.DeleteAsync(r.Id, _unsweepOnDelete);
+            _flash = _unsweepOnDelete && restored > 0
+                ? $"Deleted rule; restored {restored} message(s) from Junk."
+                : "Deleted rule.";
+            _confirmingDeleteId = null;
+            _unsweepOnDelete = false;
+            if (_previewForId == r.Id) CancelSweep();
+            await ReloadAsync();
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task OpenSweepAsync(BlacklistRule r)
+    {
+        _previewForId = r.Id;
+        _preview = null;
+        _preview = await Blacklist.SweepPreviewAsync(r.Target, r.MatchType, r.Pattern);
+    }
+
+    private async Task ConfirmSweepAsync()
+    {
+        if (_previewForId is not long id) return;
+        _busy = true;
+        try
+        {
+            var n = await Blacklist.SweepAsync(id);
+            _flash = $"Swept {n} message(s) into Junk.";
+            CancelSweep();
+            await ReloadAsync();
+        }
+        finally { _busy = false; }
+    }
+
+    private void CancelSweep()
+    {
+        _previewForId = null;
+        _preview = null;
+    }
+
+    private async Task ToggleJunkVisibilityAsync()
+    {
+        _showJunk = !_showJunk;
+        await Settings.SetBoolAsync(SettingKeys.ShowJunkInbox, _showJunk);
+        SettingsNotifier.NotifyChanged();
+    }
+
+    private static string ActionClass(RuleAction a) => a switch
+    {
+        RuleAction.Reject => "reject",
+        RuleAction.Discard => "discard",
+        _ => "junk"
+    };
+}

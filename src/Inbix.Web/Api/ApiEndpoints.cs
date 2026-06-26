@@ -80,6 +80,76 @@ public static class ApiEndpoints
             return Results.Ok(messages.Select(MessageSummaryDto.From));
         });
 
+        // --- Blacklist rules ---
+        api.MapGet("/rules", async (IBlacklistRuleRepository repo, CancellationToken ct) =>
+            Results.Ok((await repo.ListAsync(ct)).Select(RuleDto.From)));
+
+        api.MapGet("/rules/{id:long}", async (long id, IBlacklistRuleRepository repo, CancellationToken ct) =>
+            await repo.GetByIdAsync(id, ct) is { } r ? Results.Ok(RuleDto.From(r)) : Results.NotFound());
+
+        api.MapPost("/rules", async (CreateRuleRequest req, IBlacklistService service, CancellationToken ct) =>
+        {
+            var error = BlacklistRules.ValidatePattern(req.MatchType, req.Pattern);
+            if (error is not null)
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["pattern"] = [error] });
+
+            var created = await service.CreateAsync(new BlacklistRule
+            {
+                Name = req.Name, Target = req.Target, MatchType = req.MatchType,
+                Pattern = req.Pattern, Action = req.Action, Enabled = req.Enabled ?? true
+            }, ct);
+            return Results.Created($"/api/rules/{created.Id}", RuleDto.From(created));
+        });
+
+        api.MapPatch("/rules/{id:long}", async (long id, UpdateRuleRequest req, IBlacklistService service, CancellationToken ct) =>
+        {
+            var error = BlacklistRules.ValidatePattern(req.MatchType, req.Pattern);
+            if (error is not null)
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["pattern"] = [error] });
+
+            var updated = await service.UpdateAsync(new BlacklistRule
+            {
+                Id = id, Name = req.Name, Target = req.Target, MatchType = req.MatchType,
+                Pattern = req.Pattern, Action = req.Action, Enabled = req.Enabled
+            }, ct);
+            return updated is null ? Results.NotFound() : Results.Ok(RuleDto.From(updated));
+        });
+
+        api.MapDelete("/rules/{id:long}", async (long id, bool? unsweep, IBlacklistService service, CancellationToken ct) =>
+        {
+            var restored = await service.DeleteAsync(id, unsweep ?? false, ct);
+            return Results.Ok(new { restored });
+        });
+
+        api.MapPost("/rules/sweep/preview", async (SweepPreviewRequest req, IBlacklistService service, CancellationToken ct) =>
+        {
+            var preview = await service.SweepPreviewAsync(req.Target, req.MatchType, req.Pattern, ct: ct);
+            return Results.Ok(new SweepPreviewDto(preview.Count, preview.Sample.Select(SweepCandidateDto.From).ToList()));
+        });
+
+        api.MapPost("/rules/{id:long}/sweep", async (long id, IBlacklistService service, CancellationToken ct) =>
+            Results.Ok(new { junked = await service.SweepAsync(id, ct) }));
+
+        api.MapPost("/rules/{id:long}/unsweep", async (long id, IBlacklistService service, CancellationToken ct) =>
+            Results.Ok(new { restored = await service.UnsweepAsync(id, ct) }));
+
+        // --- Junk inbox ---
+        api.MapGet("/junk", async (IMessageRepository repo, int? limit, int? offset, CancellationToken ct) =>
+            Results.Ok((await repo.ListJunkWithPreviewAsync(Math.Clamp(limit ?? 100, 1, 500), Math.Max(0, offset ?? 0), ct))
+                .Select(JunkItemDto.From)));
+
+        api.MapPost("/messages/{id:long}/junk", async (long id, IBlacklistService service, CancellationToken ct) =>
+        {
+            await service.JunkMessageAsync(id, ct);
+            return Results.Ok();
+        });
+
+        api.MapPost("/messages/{id:long}/unjunk", async (long id, IBlacklistService service, CancellationToken ct) =>
+        {
+            await service.UnjunkMessageAsync(id, ct);
+            return Results.Ok();
+        });
+
         // --- Messages ---
         api.MapGet("/messages/{id:long}", async (long id, IMessageRepository repo, CancellationToken ct) =>
         {

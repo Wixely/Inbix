@@ -1,0 +1,68 @@
+@page "/junk"
+@rendermode InteractiveServer
+@inject IMessageRepository Messages
+@inject ISettingsRepository Settings
+
+<div class="page-head"><h1>Junk</h1></div>
+
+@if (!_visible)
+{
+    <p class="muted">The Junk inbox is hidden. Enable it on the <a href="rules">Rules</a> page.</p>
+}
+else
+{
+    <MailWindow>
+        <Title><span class="tlabel">Junk</span></Title>
+        <List>
+            @if (_items is null)
+            {
+                <p class="muted pad">Loading…</p>
+            }
+            else if (_items.Count == 0)
+            {
+                <p class="muted pad">Junk is empty.</p>
+            }
+            else
+            {
+                @foreach (var m in _items)
+                {
+                    <MailCard Sender="@m.Sender" Subject="@m.Subject" ReceivedAt="@m.ReceivedAt" Parsed="@m.Parsed"
+                              Chip="@m.Recipient" JunkRuleName="@m.JunkRuleName" JunkManual="@m.JunkManual"
+                              Active="@(m.Id == _selectedId)" OnClick="@(() => _selectedId = m.Id)" />
+                }
+            }
+        </List>
+        <Preview>
+            @if (_selectedId is null)
+            {
+                <div class="preview-empty muted">Select a message to read it.</div>
+            }
+            else
+            {
+                <div class="msg-scroll">
+                    <MessageView MessageId="@_selectedId.Value" OnChanged="ReloadAsync" />
+                </div>
+            }
+        </Preview>
+    </MailWindow>
+}
+
+@code {
+    private bool _visible;
+    private IReadOnlyList<JunkItem>? _items;
+    private long? _selectedId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _visible = await Settings.GetBoolAsync(SettingKeys.ShowJunkInbox);
+        if (_visible) await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _items = await Messages.ListJunkWithPreviewAsync(200, 0);
+        if (_selectedId is long sid && _items.All(i => i.Id != sid))
+            _selectedId = null;
+        _selectedId ??= _items.Count > 0 ? _items[0].Id : null;
+    }
+}

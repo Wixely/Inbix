@@ -1,4 +1,6 @@
 @inject IMessageRepository Messages
+@inject IBlacklistService Blacklist
+@inject NavigationManager Nav
 
 @if (_message is null)
 {
@@ -8,9 +10,43 @@ else
 {
     <div class="msg-head">
         <h2 class="msg-subject">@(string.IsNullOrWhiteSpace(_message.Subject) ? "(no subject)" : _message.Subject)</h2>
-        <div class="kv"><span>From</span><span>@(_message.Sender ?? "—")</span></div>
-        <div class="kv"><span>To</span><span>@_message.Recipient</span></div>
+        <div class="kv">
+            <span>From</span>
+            <span class="kv-val">
+                @(_message.Sender ?? "—")
+                @if (!string.IsNullOrWhiteSpace(_message.Sender))
+                {
+                    <button class="btn-link block-link" @onclick="() => BlockNavigate(RuleTarget.Sender, _message.Sender!)"
+                            title="Add a blacklist rule for this sender">Block sender</button>
+                }
+            </span>
+        </div>
+        <div class="kv">
+            <span>To</span>
+            <span class="kv-val">
+                @_message.Recipient
+                @if (IsCatchAll)
+                {
+                    <button class="btn-link block-link" @onclick="() => BlockNavigate(RuleTarget.Recipient, _message.Recipient)"
+                            title="Add a blacklist rule for this recipient">Block recipient</button>
+                }
+            </span>
+        </div>
         <div class="kv"><span>Received</span><span>@_message.ReceivedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</span></div>
+        <div class="kv">
+            <span>Junk</span>
+            <span class="kv-val">
+                @if (_message.JunkedAt is null)
+                {
+                    <button class="btn-link" @onclick="MoveToJunkAsync" disabled="@_busy">Move to Junk</button>
+                }
+                else
+                {
+                    <span class="muted">In Junk@(_message.JunkManual ? " (manual)" : "")</span>
+                    <button class="btn-link" @onclick="UnjunkAsync" disabled="@_busy">Unjunk</button>
+                }
+            </span>
+        </div>
         <div class="kv"><span>Raw</span><a href="@($"api/messages/{_message.Id}/raw")" target="_blank">download .eml</a></div>
         @if (_message.ParseError is not null)
         {
@@ -68,11 +104,18 @@ else
 @code {
     [Parameter] public long MessageId { get; set; }
 
+    /// <summary>True when viewed inside the catch-all inbox; enables the "Block recipient" button.</summary>
+    [Parameter] public bool IsCatchAll { get; set; }
+
+    /// <summary>Raised after a junk/unjunk so the parent list can refresh.</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
     private Message? _message;
     private MessageBody? _body;
     private IReadOnlyList<Attachment>? _attachments;
     private bool _loaded;
     private bool _showHtml;
+    private bool _busy;
     private long _loadedId = -1;
 
     private const string ContentSecurityPolicy =
@@ -101,5 +144,35 @@ else
             _attachments = null;
         }
         _loaded = true;
+    }
+
+    private void BlockNavigate(RuleTarget target, string value)
+    {
+        var t = target == RuleTarget.Sender ? "sender" : "recipient";
+        Nav.NavigateTo($"rules?target={t}&pattern={Uri.EscapeDataString(value)}&match=literal&action=junk");
+    }
+
+    private async Task MoveToJunkAsync()
+    {
+        if (_message is null) return;
+        _busy = true;
+        try
+        {
+            await Blacklist.JunkMessageAsync(_message.Id);
+            await OnChanged.InvokeAsync();
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task UnjunkAsync()
+    {
+        if (_message is null) return;
+        _busy = true;
+        try
+        {
+            await Blacklist.UnjunkMessageAsync(_message.Id);
+            await OnChanged.InvokeAsync();
+        }
+        finally { _busy = false; }
     }
 }

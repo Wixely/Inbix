@@ -14,6 +14,19 @@
             <span class="badge off">unparsed</span>
         }
     </div>
+    @if (JunkManual || !string.IsNullOrEmpty(JunkRuleName))
+    {
+        <div class="mail-tags">
+            @if (JunkManual)
+            {
+                <span class="badge manual" title="Manually set — rule sweeps ignore this message">manual</span>
+            }
+            else
+            {
+                <span class="badge rule" title="Junked by this rule">@JunkRuleName</span>
+            }
+        </div>
+    }
     <div class="mail-when">@TimeFormat.Timestamp(ReceivedAt) <span class="when-sep">&middot;</span> @TimeFormat.Ago(ReceivedAt)</div>
 </button>
 
@@ -31,6 +44,12 @@
 
     [Parameter] public bool Active { get; set; }
     [Parameter] public EventCallback OnClick { get; set; }
+
+    /// <summary>Junk list: name of the rule that junked this message (shown as a small tag).</summary>
+    [Parameter] public string? JunkRuleName { get; set; }
+
+    /// <summary>Junk list: message was manually junked/unjunked (locked against rule sweeps).</summary>
+    [Parameter] public bool JunkManual { get; set; }
 
     // Feeds the left accent bar (see .mail-card in app.css) via a CSS custom property.
     private string? CardStyle =>

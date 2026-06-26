@@ -14,4 +14,7 @@ public interface IRawMessageStore
 
     /// <summary>Open a stream over previously stored bytes.</summary>
     Task<Stream> OpenReadAsync(string storagePath, CancellationToken ct = default);
+
+    /// <summary>Delete previously stored bytes. Best-effort; a no-op if the file is already gone.</summary>
+    Task DeleteAsync(string storagePath, CancellationToken ct = default);
 }

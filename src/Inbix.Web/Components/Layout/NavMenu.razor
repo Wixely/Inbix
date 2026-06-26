@@ -1,5 +1,7 @@
 @inject IAliasRepository AliasRepo
+@inject ISettingsRepository Settings
 @inject AliasChangeNotifier Notifier
+@inject SettingsChangeNotifier SettingsNotifier
 @implements IDisposable
 
 <nav class="nav">
@@ -20,6 +22,17 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></svg>
         Status
     </NavLink>
+    <NavLink class="nav-item" href="rules" Match="NavLinkMatch.All">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></svg>
+        Rules
+    </NavLink>
+    @if (_showJunk)
+    {
+        <NavLink class="nav-item" href="junk" Match="NavLinkMatch.All">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
+            Junk
+        </NavLink>
+    }
 
     <details class="nav-group" open>
         <summary class="nav-item nav-summary">
@@ -48,10 +61,12 @@
 
 @code {
     private IReadOnlyList<Alias> _inboxes = [];
+    private bool _showJunk;
 
     protected override async Task OnInitializedAsync()
     {
-        Notifier.Changed += OnAliasesChanged;
+        Notifier.Changed += OnChanged;
+        SettingsNotifier.Changed += OnChanged;
         await LoadAsync();
     }
 
@@ -67,9 +82,11 @@
 
         list.AddRange(all.Where(a => !a.IsCatchAll).OrderBy(a => a.Address, StringComparer.OrdinalIgnoreCase));
         _inboxes = list;
+
+        _showJunk = await Settings.GetBoolAsync(SettingKeys.ShowJunkInbox);
     }
 
-    private void OnAliasesChanged() => _ = RefreshAsync();
+    private void OnChanged() => _ = RefreshAsync();
 
     private async Task RefreshAsync()
     {
@@ -77,5 +94,9 @@
         await InvokeAsync(StateHasChanged);
     }
 
-    public void Dispose() => Notifier.Changed -= OnAliasesChanged;
+    public void Dispose()
+    {
+        Notifier.Changed -= OnChanged;
+        SettingsNotifier.Changed -= OnChanged;
+    }
 }

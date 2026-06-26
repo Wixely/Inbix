@@ -15,4 +15,15 @@ public sealed class Message
     public string? RawStoragePath { get; set; }
     public bool Parsed { get; set; }
     public string? ParseError { get; set; }
+
+    // --- Junk (blacklist) state. Junk membership = JunkedAt is not null. ---
+
+    /// <summary>When the message was moved to Junk (UTC), or null if it is in its normal inbox.</summary>
+    public DateTimeOffset? JunkedAt { get; set; }
+
+    /// <summary>The blacklist rule that junked it (null for a manual junk).</summary>
+    public long? JunkRuleId { get; set; }
+
+    /// <summary>True when a manual junk/unjunk locked the message so rule sweeps skip it.</summary>
+    public bool JunkManual { get; set; }
 }

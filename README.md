@@ -88,6 +88,8 @@ using the `__` separator (e.g. `Inbix__Smtp__Port=2525`).
 | `Inbix:SeedSampleData` | `false` | On an empty DB, seed demo mailboxes + messages (and enable catch-all). On by default in Development |
 | `Inbix:Diagnostics:PublicIpLookupUrl` | `https://checkip.amazonaws.com` | Public-IP probe for the status page; empty to disable |
 | `Inbix:Diagnostics:IntervalHours` | `6` | Background diagnostics cadence (runs ~5s after startup, then every N hours); 0 = startup only |
+| `Inbix:Junk:RetentionDays` | `30` | Days a message stays in Junk before the cleanup job deletes it |
+| `Inbix:Junk:CleanupIntervalHours` | `24` | Hours between Junk cleanup runs; 0 = run only at startup |
 | `Inbix:Admin:Username` | `admin` | Admin login username |
 | `Inbix:Admin:Password` | _(empty)_ | Admin password (plaintext; prefer `PasswordHash`) |
 | `Inbix:Admin:PasswordHash` | _(empty)_ | PBKDF2 hash (preferred); see below |
@@ -155,6 +157,27 @@ sidebar footer shows a live rollup (Healthy / Warnings / Issues) linking here. C
 
 DNS lookups use [DnsClient.NET](https://github.com/MichaCo/DnsClient.NET) (Apache-2.0). Set
 `Inbix:Diagnostics:PublicIpLookupUrl` to empty to skip the outbound public-IP probe.
+
+## Rules (blacklist) & Junk
+
+The **Rules** page (`/rules`) blocks unwanted mail by **sender** or **recipient**, matched as a
+literal string or a **regex**. Each rule chooses an action:
+
+- **Reject** — refuse at SMTP `RCPT TO` with 550 ("no inbox exists"); nothing is stored.
+- **Discard** — accept (250) then silently drop.
+- **Junk** — accept (250) and file into the hidden **Junk** inbox, tagged with the matching rule.
+
+Rules apply to new mail within ~30 seconds. **Sweep** applies a rule to *existing* mail — it first
+shows a preview (count + sample with links to open the full messages), then on confirm moves the
+matches into Junk. Deleting a rule offers an **unsweep** to restore the mail it junked.
+
+The **Junk** inbox is hidden from the sidebar until you enable it with the toggle on the Rules page.
+You can manually move any message to Junk (or unjunk it) from the message view; a manual action locks
+the message so rule sweeps leave it alone (shown with a "manual" tag). Junked mail is auto-deleted
+after `Inbix:Junk:RetentionDays` (default 30) by a daily job.
+
+Quick shortcuts: the message view has **Block sender / Block recipient** buttons (pre-filling a new
+rule), and deleting an alias offers to block future mail to that address.
 
 ## Backups & restore
 

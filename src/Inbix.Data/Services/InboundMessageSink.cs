@@ -18,6 +18,7 @@ public sealed class InboundMessageSink : IInboundMessageSink
     private readonly IAliasRepository _aliases;
     private readonly IMessageRepository _messages;
     private readonly IRawMessageStore _rawStore;
+    private readonly IBlacklistMatcher _matcher;
     private readonly InbixOptions _options;
     private readonly ILogger<InboundMessageSink> _logger;
 
@@ -25,12 +26,14 @@ public sealed class InboundMessageSink : IInboundMessageSink
         IAliasRepository aliases,
         IMessageRepository messages,
         IRawMessageStore rawStore,
+        IBlacklistMatcher matcher,
         IOptions<InbixOptions> options,
         ILogger<InboundMessageSink> logger)
     {
         _aliases = aliases;
         _messages = messages;
         _rawStore = rawStore;
+        _matcher = matcher;
         _options = options.Value;
         _logger = logger;
     }
@@ -65,6 +68,19 @@ public sealed class InboundMessageSink : IInboundMessageSink
                     return InboundSaveResult.UnknownRecipient;
             }
 
+            // Blacklist: reject/discard rules accept at SMTP but store nothing; a junk rule stores the
+            // message tagged with the rule. (Reject is normally caught at RCPT; handle it here too.)
+            var match = await _matcher.MatchAsync(message.Sender, message.Recipient, ct).ConfigureAwait(false);
+            if (match is { Action: RuleAction.Reject or RuleAction.Discard })
+            {
+                _logger.LogInformation("Discarding message to {Recipient} (blacklist rule {RuleId}, {Action})",
+                    message.Recipient, match.Value.RuleId, match.Value.Action);
+                return InboundSaveResult.Stored; // accepted at SMTP, intentionally dropped
+            }
+
+            var junkedAt = match is { Action: RuleAction.Junk } ? message.ReceivedAt : (DateTimeOffset?)null;
+            var junkRuleId = match is { Action: RuleAction.Junk } ? match.Value.RuleId : (long?)null;
+
             // Persist the raw source first; if metadata write fails we still hold the original.
             var rawPath = await _rawStore.SaveRawAsync(message.RawMime, message.ReceivedAt, ct).ConfigureAwait(false);
 
@@ -77,7 +93,10 @@ public sealed class InboundMessageSink : IInboundMessageSink
                 ReceivedAt = message.ReceivedAt,
                 SizeBytes = message.SizeBytes,
                 RawStoragePath = rawPath,
-                Parsed = false
+                Parsed = false,
+                JunkedAt = junkedAt,
+                JunkRuleId = junkRuleId,
+                JunkManual = false
             };
 
             var id = await _messages.CreateAsync(row, ct).ConfigureAwait(false);

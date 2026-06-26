@@ -27,3 +27,38 @@ public sealed record AttachmentDto(long Id, string? Filename, string? ContentTyp
 
 public sealed record MessageDetailDto(MessageSummaryDto Message, string? TextBody, string? HtmlBody,
     string? ParseError, IReadOnlyList<AttachmentDto> Attachments);
+
+// --- Blacklist rules + junk ---
+
+public sealed record CreateRuleRequest(string? Name, RuleTarget Target, RuleMatch MatchType,
+    string Pattern, RuleAction Action, bool? Enabled);
+
+public sealed record UpdateRuleRequest(string? Name, RuleTarget Target, RuleMatch MatchType,
+    string Pattern, RuleAction Action, bool Enabled);
+
+public sealed record SweepPreviewRequest(RuleTarget Target, RuleMatch MatchType, string Pattern);
+
+public sealed record RuleDto(long Id, string? Name, RuleTarget Target, RuleMatch MatchType,
+    string Pattern, RuleAction Action, bool Enabled, DateTimeOffset CreatedAt)
+{
+    public static RuleDto From(BlacklistRule r) =>
+        new(r.Id, r.Name, r.Target, r.MatchType, r.Pattern, r.Action, r.Enabled, r.CreatedAt);
+}
+
+public sealed record SweepCandidateDto(long Id, long AliasId, string? Sender, string Recipient,
+    string? Subject, DateTimeOffset ReceivedAt, bool Parsed)
+{
+    public static SweepCandidateDto From(SweepCandidate c) =>
+        new(c.Id, c.AliasId, c.Sender, c.Recipient, c.Subject, c.ReceivedAt, c.Parsed);
+}
+
+public sealed record SweepPreviewDto(int Count, IReadOnlyList<SweepCandidateDto> Sample);
+
+public sealed record JunkItemDto(long Id, string? Sender, string? Subject, string Recipient,
+    DateTimeOffset ReceivedAt, bool Parsed, DateTimeOffset? JunkedAt, bool JunkManual,
+    long? JunkRuleId, string? JunkRuleName)
+{
+    public static JunkItemDto From(JunkItem j) =>
+        new(j.Id, j.Sender, j.Subject, j.Recipient, j.ReceivedAt, j.Parsed,
+            j.JunkedAt, j.JunkManual, j.JunkRuleId, j.JunkRuleName);
+}

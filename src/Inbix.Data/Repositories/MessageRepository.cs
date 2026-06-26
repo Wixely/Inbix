@@ -8,11 +8,17 @@ public sealed class MessageRepository : IMessageRepository
 {
     private const string MessageColumns =
         "id, alias_id, smtp_session_id, recipient, sender, subject, message_id_header, " +
-        "received_at, size_bytes, raw_storage_path, parsed, parse_error";
+        "received_at, size_bytes, raw_storage_path, parsed, parse_error, " +
+        "junked_at, junk_rule_id, junk_manual";
 
     private readonly IDbConnectionFactory _factory;
+    private readonly IRawMessageStore _rawStore;
 
-    public MessageRepository(IDbConnectionFactory factory) => _factory = factory;
+    public MessageRepository(IDbConnectionFactory factory, IRawMessageStore rawStore)
+    {
+        _factory = factory;
+        _rawStore = rawStore;
+    }
 
     public async Task<long> CreateAsync(Message m, CancellationToken ct = default)
     {
@@ -21,10 +27,12 @@ public sealed class MessageRepository : IMessageRepository
             """
             INSERT INTO messages
                 (alias_id, smtp_session_id, recipient, sender, subject, message_id_header,
-                 received_at, size_bytes, raw_storage_path, parsed, parse_error)
+                 received_at, size_bytes, raw_storage_path, parsed, parse_error,
+                 junked_at, junk_rule_id, junk_manual)
             VALUES
                 (@AliasId, @SmtpSessionId, @Recipient, @Sender, @Subject, @MessageIdHeader,
-                 @ReceivedAt, @SizeBytes, @RawStoragePath, @Parsed, @ParseError)
+                 @ReceivedAt, @SizeBytes, @RawStoragePath, @Parsed, @ParseError,
+                 @JunkedAt, @JunkRuleId, @JunkManual)
             RETURNING id;
             """, m).ConfigureAwait(false);
     }
@@ -42,7 +50,7 @@ public sealed class MessageRepository : IMessageRepository
         var rows = await c.QueryAsync<Message>(
             $"""
              SELECT {MessageColumns} FROM messages
-             WHERE alias_id = @aliasId
+             WHERE alias_id = @aliasId AND junked_at IS NULL
              ORDER BY received_at DESC, id DESC
              LIMIT @limit OFFSET @offset;
              """, new { aliasId, limit, offset }).ConfigureAwait(false);
@@ -58,7 +66,7 @@ public sealed class MessageRepository : IMessageRepository
                    substr(b.text_body, 1, 200) AS snippet
             FROM messages m
             LEFT JOIN message_bodies b ON b.message_id = m.id
-            WHERE m.alias_id = @aliasId
+            WHERE m.alias_id = @aliasId AND m.junked_at IS NULL
             ORDER BY m.received_at DESC, m.id DESC
             LIMIT @limit OFFSET @offset;
             """, new { aliasId, limit, offset }).ConfigureAwait(false);
@@ -77,6 +85,7 @@ public sealed class MessageRepository : IMessageRepository
             FROM messages m
             JOIN aliases a ON a.id = m.alias_id
             LEFT JOIN message_bodies b ON b.message_id = m.id
+            WHERE m.junked_at IS NULL
             ORDER BY m.received_at DESC, m.id DESC
             LIMIT @limit;
             """, new { limit }).ConfigureAwait(false);
@@ -188,5 +197,102 @@ public sealed class MessageRepository : IMessageRepository
         return await c.ExecuteAsync(
             "UPDATE messages SET alias_id = @toAliasId WHERE alias_id = @fromAliasId;",
             new { fromAliasId, toAliasId }).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<JunkItem>> ListJunkWithPreviewAsync(int limit, int offset, CancellationToken ct = default)
+    {
+        await using var c = await _factory.OpenConnectionAsync(ct).ConfigureAwait(false);
+        var rows = await c.QueryAsync<JunkItem>(
+            """
+            SELECT m.id, m.sender, m.subject, m.recipient, m.received_at, m.parsed,
+                   substr(b.text_body, 1, 200) AS snippet,
+                   m.junked_at, m.junk_manual, m.junk_rule_id, r.name AS junk_rule_name
+            FROM messages m
+            LEFT JOIN message_bodies b ON b.message_id = m.id
+            LEFT JOIN blacklist_rules r ON r.id = m.junk_rule_id
+            WHERE m.junked_at IS NOT NULL
+            ORDER BY m.junked_at DESC, m.id DESC
+            LIMIT @limit OFFSET @offset;
+            """, new { limit, offset }).ConfigureAwait(false);
+        return rows.ToList();
+    }
+
+    public async Task SetJunkAsync(long messageId, DateTimeOffset junkedAt, long? ruleId, bool manual, CancellationToken ct = default)
+    {
+        await using var c = await _factory.OpenConnectionAsync(ct).ConfigureAwait(false);
+        await c.ExecuteAsync(
+            "UPDATE messages SET junked_at = @junkedAt, junk_rule_id = @ruleId, junk_manual = @manual WHERE id = @messageId;",
+            new { messageId, junkedAt, ruleId, manual }).ConfigureAwait(false);
+    }
+
+    public async Task ClearJunkAsync(long messageId, bool manual, CancellationToken ct = default)
+    {
+        await using var c = await _factory.OpenConnectionAsync(ct).ConfigureAwait(false);
+        await c.ExecuteAsync(
+            "UPDATE messages SET junked_at = NULL, junk_rule_id = NULL, junk_manual = @manual WHERE id = @messageId;",
+            new { messageId, manual }).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<SweepCandidate>> ListSweepCandidatesAsync(CancellationToken ct = default)
+    {
+        await using var c = await _factory.OpenConnectionAsync(ct).ConfigureAwait(false);
+        var rows = await c.QueryAsync<SweepCandidate>(
+            """
+            SELECT id, alias_id, sender, recipient, subject, received_at, parsed
+            FROM messages
+            WHERE junked_at IS NULL AND junk_manual = 0
+            ORDER BY received_at DESC, id DESC;
+            """).ConfigureAwait(false);
+        return rows.ToList();
+    }
+
+    public async Task<int> UnsweepByRuleAsync(long ruleId, CancellationToken ct = default)
+    {
+        await using var c = await _factory.OpenConnectionAsync(ct).ConfigureAwait(false);
+        return await c.ExecuteAsync(
+            "UPDATE messages SET junked_at = NULL, junk_rule_id = NULL WHERE junk_rule_id = @ruleId AND junk_manual = 0;",
+            new { ruleId }).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<long>> ListJunkedBeforeAsync(DateTimeOffset cutoff, CancellationToken ct = default)
+    {
+        await using var c = await _factory.OpenConnectionAsync(ct).ConfigureAwait(false);
+        var rows = await c.QueryAsync<long>(
+            "SELECT id FROM messages WHERE junked_at IS NOT NULL AND junked_at < @cutoff;",
+            new { cutoff }).ConfigureAwait(false);
+        return rows.ToList();
+    }
+
+    public async Task DeleteAsync(long messageId, CancellationToken ct = default)
+    {
+        await using var c = await _factory.OpenConnectionAsync(ct).ConfigureAwait(false);
+
+        // Collect the on-disk paths first so we can remove the files after the rows are gone.
+        var rawPath = await c.QuerySingleOrDefaultAsync<string?>(
+            "SELECT raw_storage_path FROM messages WHERE id = @messageId;", new { messageId }).ConfigureAwait(false);
+        var attachmentPaths = (await c.QueryAsync<string>(
+            "SELECT storage_path FROM attachments WHERE message_id = @messageId;", new { messageId }).ConfigureAwait(false)).ToList();
+
+        await using (var tx = await c.BeginTransactionAsync(ct).ConfigureAwait(false))
+        {
+            try
+            {
+                await c.ExecuteAsync("DELETE FROM attachments WHERE message_id = @messageId;", new { messageId }, tx).ConfigureAwait(false);
+                await c.ExecuteAsync("DELETE FROM message_bodies WHERE message_id = @messageId;", new { messageId }, tx).ConfigureAwait(false);
+                await c.ExecuteAsync("DELETE FROM messages WHERE id = @messageId;", new { messageId }, tx).ConfigureAwait(false);
+                await tx.CommitAsync(ct).ConfigureAwait(false);
+            }
+            catch
+            {
+                await tx.RollbackAsync(ct).ConfigureAwait(false);
+                throw;
+            }
+        }
+
+        // Rows are gone; remove the backing files (best-effort).
+        if (!string.IsNullOrEmpty(rawPath))
+            await _rawStore.DeleteAsync(rawPath, ct).ConfigureAwait(false);
+        foreach (var path in attachmentPaths)
+            await _rawStore.DeleteAsync(path, ct).ConfigureAwait(false);
     }
 }

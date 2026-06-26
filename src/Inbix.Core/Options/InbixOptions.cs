@@ -22,6 +22,7 @@ public sealed class InbixOptions
     public WorkerOptions Worker { get; set; } = new();
     public BackupOptions Backups { get; set; } = new();
     public DiagnosticsOptions Diagnostics { get; set; } = new();
+    public JunkOptions Junk { get; set; } = new();
 
     /// <summary>
     /// When true and the database has no aliases yet, populate sample mailboxes and messages on
@@ -93,6 +94,16 @@ public sealed class WorkerOptions
 
     /// <summary>Number of unparsed messages to claim per poll.</summary>
     public int BatchSize { get; set; } = 20;
+}
+
+/// <summary>Junk inbox retention/cleanup settings.</summary>
+public sealed class JunkOptions
+{
+    /// <summary>Days a message stays in Junk before the cleanup job deletes it (by junked-at time).</summary>
+    public int RetentionDays { get; set; } = 30;
+
+    /// <summary>Hours between Junk cleanup runs. Set to 0 or less to run only once at startup.</summary>
+    public int CleanupIntervalHours { get; set; } = 24;
 }
 
 /// <summary>Settings for the diagnostics / status page.</summary>
