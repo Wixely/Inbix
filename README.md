@@ -179,6 +179,14 @@ after `Inbix:Junk:RetentionDays` (default 30) by a daily job.
 Quick shortcuts: the message view has **Block sender / Block recipient** buttons (pre-filling a new
 rule), and deleting an alias offers to block future mail to that address.
 
+### Per-mailbox expiry
+
+Every alias and the catch-all can auto-delete old mail (off by default, 60 days). Configure it per
+mailbox on the **Aliases** page. Retention is measured from a message's **last state change**
+(junk/unjunk/sweep/unsweep) or, if it was never moved, its received date. Enabling expiry shows a
+warning with the count and a preview of the mail that will be deleted (recycling the Sweep preview).
+The same daily job that prunes Junk (`Inbix:Junk:CleanupIntervalHours`) applies these expiries.
+
 ## Backups & restore
 
 Set `Inbix:Backups:Enabled=true` for scheduled backups (default: daily, keep 7). Each backup is a

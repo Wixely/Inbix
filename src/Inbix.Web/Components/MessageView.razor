@@ -1,5 +1,7 @@
 @inject IMessageRepository Messages
 @inject IBlacklistService Blacklist
+@inject IAuditRepository Audit
+@inject IRawMessageStore RawStore
 @inject NavigationManager Nav
 
 @if (_message is null)
@@ -10,47 +12,53 @@ else
 {
     <div class="msg-head">
         <h2 class="msg-subject">@(string.IsNullOrWhiteSpace(_message.Subject) ? "(no subject)" : _message.Subject)</h2>
-        <div class="kv">
-            <span>From</span>
-            <span class="kv-val">
-                @(_message.Sender ?? "—")
-                @if (!string.IsNullOrWhiteSpace(_message.Sender))
-                {
-                    <button class="btn-link block-link" @onclick="() => BlockNavigate(RuleTarget.Sender, _message.Sender!)"
-                            title="Add a blacklist rule for this sender">Block sender</button>
-                }
-            </span>
-        </div>
-        <div class="kv">
-            <span>To</span>
-            <span class="kv-val">
-                @_message.Recipient
-                @if (IsCatchAll)
-                {
-                    <button class="btn-link block-link" @onclick="() => BlockNavigate(RuleTarget.Recipient, _message.Recipient)"
-                            title="Add a blacklist rule for this recipient">Block recipient</button>
-                }
-            </span>
-        </div>
+        <div class="kv"><span>From</span><span>@(_message.Sender ?? "—")</span></div>
+        <div class="kv"><span>To</span><span>@_message.Recipient@(_message.JunkedAt is not null ? _message.JunkManual ? " (in Junk, manual)" : " (in Junk)" : "")</span></div>
         <div class="kv"><span>Received</span><span>@_message.ReceivedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</span></div>
-        <div class="kv">
-            <span>Junk</span>
-            <span class="kv-val">
-                @if (_message.JunkedAt is null)
-                {
-                    <button class="btn-link" @onclick="MoveToJunkAsync" disabled="@_busy">Move to Junk</button>
-                }
-                else
-                {
-                    <span class="muted">In Junk@(_message.JunkManual ? " (manual)" : "")</span>
-                    <button class="btn-link" @onclick="UnjunkAsync" disabled="@_busy">Unjunk</button>
-                }
-            </span>
-        </div>
-        <div class="kv"><span>Raw</span><a href="@($"api/messages/{_message.Id}/raw")" target="_blank">download .eml</a></div>
         @if (_message.ParseError is not null)
         {
             <div class="kv"><span>Parse error</span><span class="error">@_message.ParseError</span></div>
+        }
+        <div class="kv">
+            <span>Actions</span>
+            <span class="msg-action-btns">
+                @if (_message.JunkedAt is null)
+                {
+                    <button class="btn-sm btn-ghost" @onclick="MoveToJunkAsync" disabled="@_busy">Move to Junk</button>
+                }
+                else
+                {
+                    <button class="btn-sm btn-ghost" @onclick="UnjunkAsync" disabled="@_busy">Unjunk</button>
+                }
+                @if (_confirmingDelete)
+                {
+                    <span class="muted">Delete permanently?</span>
+                    <button class="btn-sm btn-ghost danger" @onclick="DeleteAsync" disabled="@_busy">Yes</button>
+                    <button class="btn-sm btn-ghost" @onclick="() => _confirmingDelete = false" disabled="@_busy">No</button>
+                }
+                else
+                {
+                    <button class="btn-sm btn-ghost danger" @onclick="() => _confirmingDelete = true" disabled="@_busy">Delete</button>
+                }
+                @if (!string.IsNullOrWhiteSpace(_message.Sender))
+                {
+                    <button class="btn-sm btn-ghost" @onclick="() => BlockNavigate(RuleTarget.Sender, _message.Sender!)">Block sender</button>
+                }
+                @if (IsCatchAll)
+                {
+                    <button class="btn-sm btn-ghost" @onclick="() => BlockNavigate(RuleTarget.Recipient, _message.Recipient)">Block recipient</button>
+                    <button class="btn-sm btn-ghost" @onclick="CreateAliasNavigate">Create alias</button>
+                }
+                <button class="btn-sm btn-ghost" @onclick="ToggleHeadersAsync" disabled="@_busy">@(_showHeaders ? "Hide headers" : "View headers")</button>
+                <a class="btn-sm btn-ghost" href="@($"api/messages/{_message.Id}/raw")" target="_blank">Download .eml</a>
+            </span>
+        </div>
+        @if (_showHeaders)
+        {
+            <div class="panel headers-panel">
+                <h3 class="msg-section">Headers</h3>
+                <pre class="text-view">@(_headers ?? "Loading…")</pre>
+            </div>
         }
     </div>
 
@@ -96,7 +104,7 @@ else
         }
         else
         {
-            <pre class="text-view">@(_body?.TextBody ?? "(no text body)")</pre>
+            <pre class="text-view"><LinkifiedText Text="@_body?.TextBody" Empty="(no text body)" /></pre>
         }
     </div>
 }
@@ -116,6 +124,9 @@ else
     private bool _loaded;
     private bool _showHtml;
     private bool _busy;
+    private bool _confirmingDelete;
+    private bool _showHeaders;
+    private string? _headers;
     private long _loadedId = -1;
 
     private const string ContentSecurityPolicy =
@@ -131,6 +142,9 @@ else
         if (MessageId == _loadedId) return; // only reload when the selected message changes
         _loadedId = MessageId;
         _showHtml = false;
+        _confirmingDelete = false;
+        _showHeaders = false;
+        _headers = null;
         _loaded = false;
         _message = await Messages.GetByIdAsync(MessageId);
         if (_message is not null)
@@ -150,6 +164,54 @@ else
     {
         var t = target == RuleTarget.Sender ? "sender" : "recipient";
         Nav.NavigateTo($"rules?target={t}&pattern={Uri.EscapeDataString(value)}&match=literal&action=junk");
+    }
+
+    private void CreateAliasNavigate()
+    {
+        if (_message is null) return;
+        Nav.NavigateTo($"aliases?new={Uri.EscapeDataString(_message.Recipient)}&notes={Uri.EscapeDataString("(Quick Alias)")}");
+    }
+
+    private async Task ToggleHeadersAsync()
+    {
+        _showHeaders = !_showHeaders;
+        if (_showHeaders && _headers is null)
+            _headers = await LoadHeadersAsync();
+    }
+
+    // Read the raw MIME header block (everything before the first blank line) from the raw store.
+    private async Task<string> LoadHeadersAsync()
+    {
+        if (string.IsNullOrEmpty(_message?.RawStoragePath))
+            return "(no raw source available)";
+        try
+        {
+            await using var stream = await RawStore.OpenReadAsync(_message.RawStoragePath);
+            var buffer = new byte[64 * 1024]; // headers are small; read the first chunk only
+            var read = await stream.ReadAtLeastAsync(buffer, buffer.Length, throwOnEndOfStream: false);
+            var text = System.Text.Encoding.UTF8.GetString(buffer, 0, read);
+            var end = text.IndexOf("\r\n\r\n", StringComparison.Ordinal);
+            if (end < 0) end = text.IndexOf("\n\n", StringComparison.Ordinal);
+            return (end >= 0 ? text[..end] : text).Trim();
+        }
+        catch (Exception ex)
+        {
+            return $"(could not read headers: {ex.Message})";
+        }
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (_message is null) return;
+        _busy = true;
+        try
+        {
+            await Messages.DeleteAsync(_message.Id);
+            await Audit.WriteAsync(new AuditEntry { Action = "message.delete", TargetType = "message", TargetId = _message.Id.ToString(), Actor = "ui", CreatedAt = DateTimeOffset.UtcNow });
+            _confirmingDelete = false;
+            await OnChanged.InvokeAsync();
+        }
+        finally { _busy = false; }
     }
 
     private async Task MoveToJunkAsync()

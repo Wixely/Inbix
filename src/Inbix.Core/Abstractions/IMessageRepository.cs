@@ -60,6 +60,12 @@ public interface IMessageRepository
     /// <summary>Ids of junked messages whose junked_at is older than the cutoff (for retention cleanup).</summary>
     Task<IReadOnlyList<long>> ListJunkedBeforeAsync(DateTimeOffset cutoff, CancellationToken ct = default);
 
+    /// <summary>
+    /// Non-junked messages in an alias whose effective date (last state change, else received) is older
+    /// than the cutoff — i.e. eligible for per-mailbox expiry. Oldest first, for preview and cleanup.
+    /// </summary>
+    Task<IReadOnlyList<SweepCandidate>> ListExpiryCandidatesAsync(long aliasId, DateTimeOffset cutoff, CancellationToken ct = default);
+
     /// <summary>Hard-delete a message and its body/attachments rows plus the raw + attachment files.</summary>
     Task DeleteAsync(long messageId, CancellationToken ct = default);
 }

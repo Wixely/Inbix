@@ -245,7 +245,12 @@ code, pre { font-family: var(--font-mono); }
 .btn:hover, .btn-primary:hover { filter: brightness(1.08); transform: translateY(-1px); color: #200b0a; }
 .btn-ghost { background: transparent; color: var(--text); border-color: var(--border-hi); }
 .btn-ghost:hover { background: var(--panel-2); border-color: var(--text); color: var(--text); }
+.btn-ghost.danger { color: var(--coral); border-color: rgba(240, 104, 96, 0.4); }
+.btn-ghost.danger:hover { background: var(--coral-soft); border-color: var(--coral); color: var(--coral); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+/* Message reader: all commands on one row */
+.msg-action-btns { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
 .btn svg { width: 1em; height: 1em; flex-shrink: 0; }
 
 .btn-link { background: none; border: none; color: var(--violet); cursor: pointer; padding: 0; font: inherit; }
@@ -518,6 +523,20 @@ select.input { cursor: pointer; }
 }
 .color-opt:hover { transform: scale(1.15); }
 .color-opt.sel { outline: 2px solid var(--text); outline-offset: 1px; }
+
+/* Per-mailbox expiry chip + popover editor (Aliases page) */
+.expiry-chip {
+    font: inherit; font-size: 0.76rem; cursor: pointer; padding: 0.1rem 0.55rem; border-radius: 999px;
+    border: 1px solid var(--border-hi); background: none; color: var(--muted);
+}
+.expiry-chip:hover { color: var(--text); border-color: var(--text); }
+.expiry-chip.on { color: var(--teal); background: var(--teal-soft); border-color: rgba(45, 212, 167, 0.4); }
+.expiry-popover { display: flex; flex-direction: column; gap: 0.65rem; width: max-content; }
+.expiry-days { font-size: 0.85rem; color: var(--muted); white-space: nowrap; }
+.expiry-days-input { width: 4.5rem; }
+.expiry-actions { display: flex; gap: 0.5rem; }
+.shortname-input { width: 12rem; }
+
 .mail-when { margin-top: 0.3rem; color: var(--muted); font-size: 0.76rem; font-family: var(--font-mono); }
 .when-sep { opacity: 0.45; }
 

@@ -2,7 +2,6 @@
 @rendermode InteractiveServer
 @inject IAliasRepository AliasRepo
 @inject IMessageRepository Messages
-@inject NavigationManager Nav
 
 @if (_alias is null)
 {
@@ -41,17 +40,6 @@ else
             }
             else
             {
-                @if (_alias.IsCatchAll && SelectedItem is { } item)
-                {
-                    <div class="dash-pane-head">
-                        <span class="muted promote-hint">No alias for <strong>@item.Recipient</strong> yet</span>
-                        <button class="btn btn-primary dash-open" @onclick="CreateAliasFromSelected"
-                                title="Create an alias for @item.Recipient">
-                            Create alias
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M19 8v6" /><path d="M22 11h-6" /></svg>
-                        </button>
-                    </div>
-                }
                 <div class="msg-scroll">
                     <MessageView MessageId="@_selectedId.Value" IsCatchAll="@_alias.IsCatchAll" OnChanged="OnMessageChangedAsync" />
                 </div>
@@ -72,21 +60,9 @@ else
     private bool _loaded;
     private long _loadedAliasId = -1;
 
-    private string Title => _alias is null ? "" : _alias.IsCatchAll ? "Catch-all" : _alias.Address;
+    private string Title => _alias is null ? "" : _alias.IsCatchAll ? "Catch-all" : _alias.DisplayName;
 
-    private InboxItem? SelectedItem => _items?.FirstOrDefault(i => i.Id == _selectedId);
-
-    // Catch-all quick action: jump to the Aliases page with the create form pre-filled for the
-    // selected message's recipient. Creating it migrates the matching catch-all mail into the alias.
-    private void CreateAliasFromSelected()
-    {
-        var recipient = SelectedItem?.Recipient;
-        if (string.IsNullOrWhiteSpace(recipient)) return;
-        var url = $"aliases?new={Uri.EscapeDataString(recipient)}&notes={Uri.EscapeDataString("(Quick Alias)")}";
-        Nav.NavigateTo(url);
-    }
-
-    // After a junk/unjunk in the reader, reload the list (junked mail leaves this inbox) and keep a valid selection.
+    // After a junk/unjunk/delete in the reader, reload the list (the message may leave this inbox) and keep a valid selection.
     private async Task OnMessageChangedAsync()
     {
         _items = await Messages.ListByAliasWithPreviewAsync(AliasId, 100, 0);

@@ -26,4 +26,7 @@ public sealed class Message
 
     /// <summary>True when a manual junk/unjunk locked the message so rule sweeps skip it.</summary>
     public bool JunkManual { get; set; }
+
+    /// <summary>Last time the junk state changed (junk/unjunk/sweep/unsweep). Null = never moved; retention then counts from <see cref="ReceivedAt"/>.</summary>
+    public DateTimeOffset? StateChangedAt { get; set; }
 }

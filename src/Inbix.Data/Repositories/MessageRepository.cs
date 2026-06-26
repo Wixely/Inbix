@@ -9,7 +9,7 @@ public sealed class MessageRepository : IMessageRepository
     private const string MessageColumns =
         "id, alias_id, smtp_session_id, recipient, sender, subject, message_id_header, " +
         "received_at, size_bytes, raw_storage_path, parsed, parse_error, " +
-        "junked_at, junk_rule_id, junk_manual";
+        "junked_at, junk_rule_id, junk_manual, state_changed_at";
 
     private readonly IDbConnectionFactory _factory;
     private readonly IRawMessageStore _rawStore;
@@ -221,7 +221,7 @@ public sealed class MessageRepository : IMessageRepository
     {
         await using var c = await _factory.OpenConnectionAsync(ct).ConfigureAwait(false);
         await c.ExecuteAsync(
-            "UPDATE messages SET junked_at = @junkedAt, junk_rule_id = @ruleId, junk_manual = @manual WHERE id = @messageId;",
+            "UPDATE messages SET junked_at = @junkedAt, junk_rule_id = @ruleId, junk_manual = @manual, state_changed_at = @junkedAt WHERE id = @messageId;",
             new { messageId, junkedAt, ruleId, manual }).ConfigureAwait(false);
     }
 
@@ -229,8 +229,8 @@ public sealed class MessageRepository : IMessageRepository
     {
         await using var c = await _factory.OpenConnectionAsync(ct).ConfigureAwait(false);
         await c.ExecuteAsync(
-            "UPDATE messages SET junked_at = NULL, junk_rule_id = NULL, junk_manual = @manual WHERE id = @messageId;",
-            new { messageId, manual }).ConfigureAwait(false);
+            "UPDATE messages SET junked_at = NULL, junk_rule_id = NULL, junk_manual = @manual, state_changed_at = @now WHERE id = @messageId;",
+            new { messageId, manual, now = DateTimeOffset.UtcNow }).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<SweepCandidate>> ListSweepCandidatesAsync(CancellationToken ct = default)
@@ -250,8 +250,22 @@ public sealed class MessageRepository : IMessageRepository
     {
         await using var c = await _factory.OpenConnectionAsync(ct).ConfigureAwait(false);
         return await c.ExecuteAsync(
-            "UPDATE messages SET junked_at = NULL, junk_rule_id = NULL WHERE junk_rule_id = @ruleId AND junk_manual = 0;",
-            new { ruleId }).ConfigureAwait(false);
+            "UPDATE messages SET junked_at = NULL, junk_rule_id = NULL, state_changed_at = @now WHERE junk_rule_id = @ruleId AND junk_manual = 0;",
+            new { ruleId, now = DateTimeOffset.UtcNow }).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<SweepCandidate>> ListExpiryCandidatesAsync(long aliasId, DateTimeOffset cutoff, CancellationToken ct = default)
+    {
+        await using var c = await _factory.OpenConnectionAsync(ct).ConfigureAwait(false);
+        var rows = await c.QueryAsync<SweepCandidate>(
+            """
+            SELECT id, alias_id, sender, recipient, subject, received_at, parsed
+            FROM messages
+            WHERE alias_id = @aliasId AND junked_at IS NULL
+              AND COALESCE(state_changed_at, received_at) < @cutoff
+            ORDER BY COALESCE(state_changed_at, received_at) ASC, id ASC;
+            """, new { aliasId, cutoff }).ConfigureAwait(false);
+        return rows.ToList();
     }
 
     public async Task<IReadOnlyList<long>> ListJunkedBeforeAsync(DateTimeOffset cutoff, CancellationToken ct = default)

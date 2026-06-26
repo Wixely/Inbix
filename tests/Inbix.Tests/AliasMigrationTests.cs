@@ -97,6 +97,22 @@ public sealed class AliasMigrationTests : IAsyncLifetime, IDisposable
         Assert.NotNull(await aliases.GetCatchAllAsync()); // still there
     }
 
+    [Fact]
+    public async Task Shortname_Persists_And_Drives_DisplayName()
+    {
+        var aliases = _sp.GetRequiredService<IAliasRepository>();
+        var alias = await aliases.CreateAsync("spotify", "mydomain.com", null);
+        Assert.Equal("spotify@mydomain.com", alias.DisplayName); // default: the address
+
+        var on = await aliases.UpdateShortnameAsync(alias.Id, enabled: true, shortname: "Spotify");
+        Assert.True(on!.ShortnameEnabled);
+        Assert.Equal("Spotify", on.Shortname);
+        Assert.Equal("Spotify", on.DisplayName);
+
+        var off = await aliases.UpdateShortnameAsync(alias.Id, enabled: false, shortname: "Spotify");
+        Assert.Equal("spotify@mydomain.com", off!.DisplayName); // disabled -> back to the address
+    }
+
     public Task DisposeAsync() => Task.CompletedTask;
 
     public void Dispose()

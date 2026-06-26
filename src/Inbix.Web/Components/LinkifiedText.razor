@@ -1,0 +1,57 @@
+@using System.Text.RegularExpressions
+@using Microsoft.AspNetCore.Components.Rendering
+
+@* Renders a plain-text body, turning detected http(s) URLs into links that open in a new window with
+   no referrer. Non-URL text is added via AddContent so Razor HTML-encodes it (XSS-safe); only http/https
+   URLs become anchors, so a javascript:/data: href can't be injected. *@
+@if (string.IsNullOrEmpty(Text))
+{
+    @Empty
+}
+else
+{
+    @RenderContent
+}
+
+@code {
+    /// <summary>The plain-text body to render.</summary>
+    [Parameter] public string? Text { get; set; }
+
+    /// <summary>Placeholder shown when <see cref="Text"/> is null/empty.</summary>
+    [Parameter] public string? Empty { get; set; }
+
+    // http/https URLs, stopping at whitespace, quotes and angle brackets.
+    private static readonly Regex UrlPattern =
+        new("https?://[^\\s<>\"']+", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private RenderFragment RenderContent => builder =>
+    {
+        var text = Text!;
+        var seq = 0;
+        var last = 0;
+
+        foreach (Match m in UrlPattern.Matches(text))
+        {
+            if (m.Index > last)
+                builder.AddContent(seq++, text[last..m.Index]);
+
+            // Keep trailing punctuation / closing brackets out of the link itself.
+            var url = m.Value.TrimEnd('.', ',', ';', ':', '!', '?', ')', ']', '}', '"', '\'');
+
+            builder.OpenElement(seq++, "a");
+            builder.AddAttribute(seq++, "href", url);
+            builder.AddAttribute(seq++, "target", "_blank");
+            builder.AddAttribute(seq++, "rel", "noopener noreferrer");
+            builder.AddContent(seq++, url);
+            builder.CloseElement();
+
+            if (url.Length < m.Value.Length)
+                builder.AddContent(seq++, m.Value[url.Length..]);
+
+            last = m.Index + m.Length;
+        }
+
+        if (last < text.Length)
+            builder.AddContent(seq++, text[last..]);
+    };
+}

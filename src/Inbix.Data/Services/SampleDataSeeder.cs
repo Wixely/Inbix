@@ -144,67 +144,67 @@ public sealed class SampleDataSeeder : IHostedService
     {
         yield return ("spotify", new[]
         {
-            new Mail("Spotify <noreply@spotify.com>", "Your Discover Weekly is ready", "Fresh tracks picked for you this week. Dive in and find your next favourite song.",
+            new Mail("Spotify <noreply@spotify.com>", "Your Discover Weekly is ready", "Fresh tracks picked for you this week. Listen now: https://open.spotify.com/playlist/discover-weekly",
                 "<html><body><h1>Discover Weekly</h1><img src=\"http://t.spotify.com/px.gif\"><p>Fresh tracks picked for you this week.</p></body></html>"),
-            new Mail("Spotify <noreply@spotify.com>", "Your receipt from Spotify", "Thanks for your payment of 9.99 for Spotify Premium."),
-            new Mail("Spotify <noreply@spotify.com>", "New release from an artist you follow", "The album you have been waiting for is out now."),
+            new Mail("Spotify <noreply@spotify.com>", "Your receipt from Spotify", "Thanks for your payment of 9.99 for Spotify Premium. View your receipt at https://www.spotify.com/account/order-history/"),
+            new Mail("Spotify <noreply@spotify.com>", "New release from an artist you follow", "The album you have been waiting for is out now: https://open.spotify.com/album/new-release"),
             new Mail("Spotify <noreply@spotify.com>", "Your offline playlist is ready", "We saved your playlist so you can listen anywhere."),
-            new Mail("Spotify <noreply@spotify.com>", "Your password was changed", "Your Spotify password was changed successfully. If this was not you, contact support."),
-            new Mail("Spotify <noreply@spotify.com>", "3 months of Premium on us", "Come back to ad-free listening with 3 months free."),
+            new Mail("Spotify <noreply@spotify.com>", "Your password was changed", "Your Spotify password was changed successfully. If this was not you, secure your account at https://accounts.spotify.com/password-reset"),
+            new Mail("Spotify <noreply@spotify.com>", "3 months of Premium on us", "Come back to ad-free listening with 3 months free: https://www.spotify.com/premium/"),
             new Mail("Spotify <noreply@spotify.com>", "Wrapped is almost here", "Your year in music is being prepared."),
-            new Mail("Spotify <noreply@spotify.com>", "Concerts near you", "Artists you follow are playing live soon."),
+            new Mail("Spotify <noreply@spotify.com>", "Concerts near you", "Artists you follow are playing live soon. Tickets: https://www.spotify.com/concerts"),
         });
 
         yield return ("github", new[]
         {
-            new Mail("GitHub <security@github.com>", "New sign-in to your account", "We noticed a new sign-in from a new device. If this was you, no action is needed."),
-            new Mail("GitHub <notifications@github.com>", "PR #42 was merged", "Your pull request was merged into main.",
+            new Mail("GitHub <security@github.com>", "New sign-in to your account", "We noticed a new sign-in from a new device. Review it at https://github.com/settings/security-log"),
+            new Mail("GitHub <notifications@github.com>", "PR #42 was merged", "Your pull request was merged into main: https://github.com/octocat/inbix/pull/42",
                 "<html><body><h2>Merged</h2><p>Your pull request <b>#42</b> was merged into <code>main</code>.</p></body></html>"),
-            new Mail("GitHub <security@github.com>", "Security alert: vulnerable dependency", "A dependency in one of your repositories has a known vulnerability."),
-            new Mail("GitHub <notifications@github.com>", "You have 5 new notifications", "Catch up on activity across your repositories."),
+            new Mail("GitHub <security@github.com>", "Security alert: vulnerable dependency", "A dependency in one of your repositories has a known vulnerability. Details: https://github.com/octocat/inbix/security/dependabot"),
+            new Mail("GitHub <notifications@github.com>", "You have 5 new notifications", "Catch up on activity at https://github.com/notifications"),
             new Mail("GitHub <notifications@github.com>", "Your weekly digest", "Here is what happened across your repositories this week."),
-            new Mail("GitHub <actions@github.com>", "Deploy succeeded", "Your GitHub Actions workflow completed successfully."),
-            new Mail("GitHub <notifications@github.com>", "octocat mentioned you", "You were mentioned in an issue comment."),
+            new Mail("GitHub <actions@github.com>", "Deploy succeeded", "Your GitHub Actions workflow completed successfully. View the run: https://github.com/octocat/inbix/actions/runs/12345"),
+            new Mail("GitHub <notifications@github.com>", "octocat mentioned you", "You were mentioned in an issue comment: https://github.com/octocat/inbix/issues/7"),
         });
 
         yield return ("amazon", new[]
         {
-            new Mail("Amazon <ship-confirm@amazon.com>", "Your order has shipped", "Order 112-4458 is on its way and will arrive Thursday."),
+            new Mail("Amazon <ship-confirm@amazon.com>", "Your order has shipped", "Order 112-4458 is on its way. Track it at https://www.amazon.com/gp/your-account/order-details?orderId=112-4458"),
             new Mail("Amazon <auto-confirm@amazon.com>", "Your Amazon order #114-220", "Thanks for your order. We will let you know when it ships."),
-            new Mail("Amazon <ship-confirm@amazon.com>", "Delivered: your package", "Your package was left at the front door."),
-            new Mail("Amazon <deals@amazon.com>", "Deal of the day", "Today only: up to 40 percent off electronics.",
+            new Mail("Amazon <ship-confirm@amazon.com>", "Delivered: your package", "Your package was left at the front door. A problem? Visit https://www.amazon.com/gp/help"),
+            new Mail("Amazon <deals@amazon.com>", "Deal of the day", "Today only: up to 40 percent off electronics. Shop now: https://www.amazon.com/deals",
                 "<html><body><h1>Deal of the Day</h1><img src=\"http://ads.amazon.com/banner.png\"><p>Up to 40% off electronics.</p></body></html>"),
-            new Mail("Amazon <auto-confirm@amazon.com>", "Your subscription renews soon", "Prime renews on the 28th."),
+            new Mail("Amazon <auto-confirm@amazon.com>", "Your subscription renews soon", "Prime renews on the 28th. Manage it at https://www.amazon.com/prime"),
             new Mail("Amazon <auto-confirm@amazon.com>", "Refund issued", "We have issued a refund to your original payment method."),
         });
 
         yield return ("netflix", new[]
         {
-            new Mail("Netflix <info@netflix.com>", "New on Netflix this week", "Fresh titles just landed in your region."),
-            new Mail("Netflix <info@netflix.com>", "Your bill", "Your monthly Netflix charge of 15.49 has been processed."),
-            new Mail("Netflix <info@netflix.com>", "Finish watching", "Pick up where you left off."),
-            new Mail("Netflix <info@netflix.com>", "New device using your account", "A new device started watching on your account."),
+            new Mail("Netflix <info@netflix.com>", "New on Netflix this week", "Fresh titles just landed in your region. Browse them: https://www.netflix.com/browse"),
+            new Mail("Netflix <info@netflix.com>", "Your bill", "Your monthly Netflix charge of 15.49 has been processed. See https://www.netflix.com/account"),
+            new Mail("Netflix <info@netflix.com>", "Finish watching", "Pick up where you left off: https://www.netflix.com/continue"),
+            new Mail("Netflix <info@netflix.com>", "New device using your account", "A new device started watching. Not you? https://www.netflix.com/account/security"),
             new Mail("Netflix <info@netflix.com>", "We added a title to your list", "It is ready to watch now."),
-            new Mail("Netflix <info@netflix.com>", "Password reset requested", "Use the link in the app to reset your password."),
+            new Mail("Netflix <info@netflix.com>", "Password reset requested", "Use this link to reset your password: https://www.netflix.com/password"),
         });
     }
 
     private static Mail[] CatchAllPool() => new[]
     {
-        new Mail("marketing@acme.io", "Partnership opportunity", "We would love to explore working together on an upcoming campaign."),
-        new Mail("deals@shopnow.com", "Flash sale ends tonight", "Up to 70 percent off everything in store."),
-        new Mail("no-reply@survey.co", "We value your feedback", "Take our 2-minute survey and help us improve."),
-        new Mail("team@startup.dev", "Try our new API", "Build faster with our developer platform. Free tier available."),
-        new Mail("hr@recruit.com", "A job opportunity for you", "We came across your profile and think you would be a great fit."),
-        new Mail("billing@hosting.net", "Invoice attached", "Your monthly hosting invoice is now available."),
-        new Mail("events@confs.org", "You are invited to DevConf", "Join 5,000 engineers this autumn for three days of talks."),
-        new Mail("press@news.com", "This week's headlines", "Top stories in technology, curated for you."),
-        new Mail("support@vendor.io", "Ticket #882 updated", "We have responded to your support request."),
-        new Mail("promo@travel.com", "Cheap flights this weekend", "Deals departing from your city, this weekend only."),
+        new Mail("marketing@acme.io", "Partnership opportunity", "We would love to explore working together. More at https://acme.io/partners"),
+        new Mail("deals@shopnow.com", "Flash sale ends tonight", "Up to 70 percent off everything in store: https://shopnow.com/flash-sale"),
+        new Mail("no-reply@survey.co", "We value your feedback", "Take our 2-minute survey and help us improve: https://survey.co/r/inbix"),
+        new Mail("team@startup.dev", "Try our new API", "Build faster with our developer platform. Read the docs: https://startup.dev/docs"),
+        new Mail("hr@recruit.com", "A job opportunity for you", "We think you would be a great fit. Apply at https://recruit.com/jobs/8842"),
+        new Mail("billing@hosting.net", "Invoice attached", "Your monthly hosting invoice is available at https://hosting.net/billing/invoices"),
+        new Mail("events@confs.org", "You are invited to DevConf", "Join 5,000 engineers this autumn. Register: https://confs.org/devconf/register"),
+        new Mail("press@news.com", "This week's headlines", "Top stories in technology, curated for you: https://news.com/tech"),
+        new Mail("support@vendor.io", "Ticket #882 updated", "We have responded to your support request: https://vendor.io/tickets/882"),
+        new Mail("promo@travel.com", "Cheap flights this weekend", "Deals departing from your city: https://travel.com/deals"),
         new Mail("noreply@bank-alerts.com", "Your statement is ready", "Your monthly account statement is available to view."),
-        new Mail("hello@designhub.co", "New templates dropped", "Fresh designs for your next project are here."),
-        new Mail("updates@social.app", "You have 12 new followers", "See who started following you this week."),
-        new Mail("winner@prize-draw.net", "You may have already won", "Claim your prize before it expires."),
-        new Mail("newsletter@weekly.dev", "The Weekly Dev #210", "Curated links and tools for developers, fresh this week."),
+        new Mail("hello@designhub.co", "New templates dropped", "Fresh designs for your next project: https://designhub.co/templates"),
+        new Mail("updates@social.app", "You have 12 new followers", "See who started following you this week: https://social.app/followers"),
+        new Mail("winner@prize-draw.net", "You may have already won", "Claim your prize before it expires: http://prize-draw.net/claim?id=99213"),
+        new Mail("newsletter@weekly.dev", "The Weekly Dev #210", "Curated links and tools for developers: https://weekly.dev/issues/210"),
     };
 }

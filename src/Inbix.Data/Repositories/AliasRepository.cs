@@ -7,7 +7,8 @@ namespace Inbix.Data.Repositories;
 public sealed class AliasRepository : IAliasRepository
 {
     private const string Columns =
-        "id, local_part, domain, enabled, created_at, disabled_at, notes, is_catch_all, color";
+        "id, local_part, domain, enabled, created_at, disabled_at, notes, is_catch_all, color, " +
+        "expiry_enabled, expiry_days, shortname, shortname_enabled";
 
     private readonly IDbConnectionFactory _factory;
 
@@ -61,6 +62,22 @@ public sealed class AliasRepository : IAliasRepository
         return await c.QuerySingleOrDefaultAsync<Alias>(
             $"UPDATE aliases SET color = @color WHERE id = @id RETURNING {Columns};",
             new { id, color }).ConfigureAwait(false);
+    }
+
+    public async Task<Alias?> UpdateExpiryAsync(long id, bool enabled, int days, CancellationToken ct = default)
+    {
+        await using var c = await _factory.OpenConnectionAsync(ct).ConfigureAwait(false);
+        return await c.QuerySingleOrDefaultAsync<Alias>(
+            $"UPDATE aliases SET expiry_enabled = @enabled, expiry_days = @days WHERE id = @id RETURNING {Columns};",
+            new { id, enabled = enabled ? 1 : 0, days }).ConfigureAwait(false);
+    }
+
+    public async Task<Alias?> UpdateShortnameAsync(long id, bool enabled, string shortname, CancellationToken ct = default)
+    {
+        await using var c = await _factory.OpenConnectionAsync(ct).ConfigureAwait(false);
+        return await c.QuerySingleOrDefaultAsync<Alias>(
+            $"UPDATE aliases SET shortname = @shortname, shortname_enabled = @enabled WHERE id = @id RETURNING {Columns};",
+            new { id, shortname = shortname ?? string.Empty, enabled = enabled ? 1 : 0 }).ConfigureAwait(false);
     }
 
     public async Task DeleteAsync(long id, CancellationToken ct = default)

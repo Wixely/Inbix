@@ -51,7 +51,7 @@
                 {
                     <NavLink class="nav-subitem" href="@($"aliases/{box.Id}/inbox")">
                         <span class="nav-dot" style="background:@box.Color"></span>
-                        <span class="nav-subitem-label">@(box.IsCatchAll ? "Catch-all" : box.Address)</span>
+                        <span class="nav-subitem-label">@(box.IsCatchAll ? "Catch-all" : box.DisplayName)</span>
                     </NavLink>
                 }
             }

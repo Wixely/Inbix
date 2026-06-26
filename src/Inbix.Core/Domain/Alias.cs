@@ -17,5 +17,21 @@ public sealed class Alias
     /// <summary>Accent colour (hex) for the sidebar inbox list and dashboard chips. Defaults to violet.</summary>
     public string Color { get; set; } = "#8b7cf6";
 
+    /// <summary>When true, mail in this mailbox older than <see cref="ExpiryDays"/> is auto-deleted.</summary>
+    public bool ExpiryEnabled { get; set; }
+
+    /// <summary>Days of retention when <see cref="ExpiryEnabled"/> is set. Defaults to 60.</summary>
+    public int ExpiryDays { get; set; } = 60;
+
+    /// <summary>Optional friendly display name shown instead of the address when <see cref="ShortnameEnabled"/>.</summary>
+    public string Shortname { get; set; } = string.Empty;
+
+    /// <summary>When true (and a shortname is set), the mailbox shows as the shortname in the sidebar/inbox title.</summary>
+    public bool ShortnameEnabled { get; set; }
+
     public string Address => $"{LocalPart}@{Domain}";
+
+    /// <summary>What to label this mailbox with: the shortname when enabled/set, otherwise the address.</summary>
+    public string DisplayName =>
+        ShortnameEnabled && !string.IsNullOrWhiteSpace(Shortname) ? Shortname.Trim() : Address;
 }

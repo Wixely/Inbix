@@ -15,4 +15,13 @@ public interface IAliasService
 
     /// <summary>Delete an alias, moving its messages to the catch-all. Returns the number moved. Throws for the catch-all.</summary>
     Task<int> DeleteAsync(long aliasId, CancellationToken ct = default);
+
+    /// <summary>Dry run: count + sample of messages that an expiry of <paramref name="days"/> days would delete from a mailbox.</summary>
+    Task<SweepPreview> ExpiryPreviewAsync(long aliasId, int days, int sampleSize = 10, CancellationToken ct = default);
+
+    /// <summary>
+    /// Persist a mailbox's expiry settings. When enabling with <paramref name="deleteNow"/>, immediately
+    /// deletes the mail already past the threshold. Returns how many were deleted now.
+    /// </summary>
+    Task<int> SetExpiryAsync(long aliasId, bool enabled, int days, bool deleteNow, CancellationToken ct = default);
 }

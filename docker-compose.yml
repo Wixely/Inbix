@@ -41,7 +41,8 @@ services:
       # Background diagnostics run a few seconds after startup, then every N hours (0 = startup only).
       Inbix__Diagnostics__IntervalHours: "6"
 
-      # Junk inbox: delete junked mail older than RetentionDays; cleanup runs every CleanupIntervalHours.
+      # Retention cleanup cadence (CleanupIntervalHours) drives both Junk deletion (after RetentionDays)
+      # and per-mailbox expiry (configured per alias on the Aliases page).
       Inbix__Junk__RetentionDays: "30"
       Inbix__Junk__CleanupIntervalHours: "24"
 

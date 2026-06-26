@@ -61,7 +61,7 @@ public static class DependencyInjection
         services.AddSingleton<IInboundMessageSink, InboundMessageSink>();
         services.AddSingleton<IBackupService, SqliteBackupService>();
         services.AddHostedService<BackupHostedService>();
-        services.AddHostedService<JunkCleanupHostedService>();
+        services.AddHostedService<MessageRetentionHostedService>();
 
         return services;
     }

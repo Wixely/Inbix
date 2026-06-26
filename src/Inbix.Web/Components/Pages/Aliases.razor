@@ -30,7 +30,7 @@ else
 {
     <table class="grid">
         <thead>
-            <tr><th>Address</th><th>Status</th><th>Created</th><th>Notes</th><th class="actions-col"></th></tr>
+            <tr><th>Address</th><th>Status</th><th>Created</th><th>Notes</th><th>Expiry</th><th>Shortname</th><th class="actions-col"></th></tr>
         </thead>
         <tbody>
             @if (_creating)
@@ -54,6 +54,8 @@ else
                     </td>
                     <td class="muted">—</td>
                     <td class="muted">@ca.Notes</td>
+                    <td>@ExpiryCell(ca)</td>
+                    <td class="muted">—</td>
                     <td class="row-actions"></td>
                 </tr>
             }
@@ -77,6 +79,8 @@ else
                         </td>
                         <td>@a.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
                         <td class="muted">@a.Notes</td>
+                        <td>@ExpiryCell(a)</td>
+                        <td>@ShortnameCell(a)</td>
                         <td class="row-actions">
                             @if (_confirmingDeleteId == a.Id)
                             {
@@ -99,10 +103,38 @@ else
 
             @if (!Regular.Any() && !_creating)
             {
-                <tr><td colspan="5" class="muted empty-row">No aliases yet — click “New alias” to add one.</td></tr>
+                <tr><td colspan="7" class="muted empty-row">No aliases yet — click “New alias” to add one.</td></tr>
             }
         </tbody>
     </table>
+
+    @if (_expiryPreview is not null && _expiryAlias is { } xa)
+    {
+        <div class="panel sweep-preview">
+            <div class="sweep-preview-head">
+                <h2>Enable expiry</h2>
+                <button class="btn-ghost" @onclick="CancelExpiryPreview" disabled="@_busy">Close</button>
+            </div>
+            <p class="muted">
+                Enabling <strong>@_expiryDaysConfirm-day</strong> expiry on <strong>@LabelText(xa)</strong> will
+                permanently delete <strong>@_expiryPreview.Count</strong> message(s)@(_expiryPreview.Count > _expiryPreview.Sample.Count ? $" (showing the oldest {_expiryPreview.Sample.Count})" : "").
+            </p>
+            <div class="sweep-cards">
+                @foreach (var m in _expiryPreview.Sample)
+                {
+                    <a class="sweep-card" href="@($"aliases/{m.AliasId}/inbox?m={m.Id}")" target="_blank">
+                        <div class="sweep-card-from">@(string.IsNullOrWhiteSpace(m.Sender) ? "(unknown sender)" : m.Sender)</div>
+                        <div class="sweep-card-subj">@(string.IsNullOrWhiteSpace(m.Subject) ? "(no subject)" : m.Subject)</div>
+                        <div class="sweep-card-meta">@m.Recipient <span class="when-sep">&middot;</span> @TimeFormat.Timestamp(m.ReceivedAt)</div>
+                    </a>
+                }
+            </div>
+            <div class="btn-row">
+                <button class="btn btn-primary" @onclick="ConfirmExpiryAsync" disabled="@_busy">Enable &amp; delete @_expiryPreview.Count now</button>
+                <button class="btn-ghost" @onclick="CancelExpiryPreview" disabled="@_busy">Cancel</button>
+            </div>
+        </div>
+    }
 }
 
 @code {
@@ -118,6 +150,19 @@ else
     private long? _confirmingDeleteId;
     private bool _blockOnDelete;
     private long? _pickerForId;
+
+    // Per-mailbox expiry editor + warning panel state.
+    private long? _expiryForId;
+    private bool _expiryEnabledForm;
+    private int _expiryDaysForm = 60;
+    private SweepPreview? _expiryPreview;
+    private Alias? _expiryAlias;
+    private int _expiryDaysConfirm = 60;
+
+    // Shortname (display name) editor state.
+    private long? _shortnameForId;
+    private bool _shortnameEnabledForm;
+    private string _shortnameForm = string.Empty;
 
     // 24-colour accent palette; the first entry (violet) is the default applied to new aliases.
     private static readonly string[] Palette =
@@ -141,7 +186,7 @@ else
 
     // Shared inline editor used for both create (blank row at the top) and edit (in place of the row).
     private RenderFragment EditorRow => @<tr class="edit-row">
-        <td colspan="5">
+        <td colspan="7">
             <div class="form-row">
                 @if (_editingId is null)
                 {
@@ -193,7 +238,153 @@ else
         }
     </span>;
 
-    private void TogglePicker(long id) => _pickerForId = _pickerForId == id ? null : id;
+    private void TogglePicker(long id)
+    {
+        _expiryForId = null;
+        _shortnameForId = null;
+        _pickerForId = _pickerForId == id ? null : id;
+    }
+
+    // Per-mailbox expiry chip + popover editor, shared by the catch-all and regular alias rows.
+    private RenderFragment ExpiryCell(Alias a) => @<span class="color-cell">
+        <button type="button" class="expiry-chip @(a.ExpiryEnabled ? "on" : "")"
+                title="Message expiry" @onclick="() => OpenExpiry(a)">
+            @(a.ExpiryEnabled ? $"{a.ExpiryDays}d" : "Off")
+        </button>
+        @if (_expiryForId == a.Id)
+        {
+            <div class="color-popover expiry-popover">
+                <label class="switch">
+                    <input type="checkbox" @bind="_expiryEnabledForm" />
+                    <span class="slider"></span>
+                    <span class="switch-label">Auto-delete old mail</span>
+                </label>
+                <div class="expiry-days">
+                    after <input class="input expiry-days-input" type="number" min="1" @bind="_expiryDaysForm" /> days
+                </div>
+                <div class="expiry-actions">
+                    <button class="btn btn-primary" @onclick="() => ApplyExpiryAsync(a)" disabled="@_busy">Apply</button>
+                    <button class="btn-ghost" @onclick="CancelExpiry" disabled="@_busy">Cancel</button>
+                </div>
+            </div>
+        }
+    </span>;
+
+    private void OpenExpiry(Alias a)
+    {
+        _pickerForId = null;
+        _shortnameForId = null;
+        CancelExpiryPreview();
+        _expiryForId = a.Id;
+        _expiryEnabledForm = a.ExpiryEnabled;
+        _expiryDaysForm = a.ExpiryDays;
+    }
+
+    // Shortname (display name) chip + popover editor.
+    private RenderFragment ShortnameCell(Alias a) => @<span class="color-cell">
+        <button type="button" class="expiry-chip @(a.ShortnameEnabled && !string.IsNullOrWhiteSpace(a.Shortname) ? "on" : "")"
+                title="Display name" @onclick="() => OpenShortname(a)">
+            @(a.ShortnameEnabled && !string.IsNullOrWhiteSpace(a.Shortname) ? a.Shortname : "Off")
+        </button>
+        @if (_shortnameForId == a.Id)
+        {
+            <div class="color-popover expiry-popover">
+                <label class="switch">
+                    <input type="checkbox" @bind="_shortnameEnabledForm" />
+                    <span class="slider"></span>
+                    <span class="switch-label">Show shortname</span>
+                </label>
+                <input class="input shortname-input" placeholder="display name" @bind="_shortnameForm" />
+                <div class="expiry-actions">
+                    <button class="btn btn-primary" @onclick="() => ApplyShortnameAsync(a)" disabled="@_busy">Apply</button>
+                    <button class="btn-ghost" @onclick="CancelShortname" disabled="@_busy">Cancel</button>
+                </div>
+            </div>
+        }
+    </span>;
+
+    private void OpenShortname(Alias a)
+    {
+        _pickerForId = null;
+        _expiryForId = null;
+        CancelExpiryPreview();
+        _shortnameForId = a.Id;
+        _shortnameEnabledForm = a.ShortnameEnabled;
+        // Auto-fill from the local part when no shortname has been set yet (e.g. spotify@host -> "spotify").
+        _shortnameForm = string.IsNullOrWhiteSpace(a.Shortname) ? a.LocalPart : a.Shortname;
+    }
+
+    private void CancelShortname() => _shortnameForId = null;
+
+    private async Task ApplyShortnameAsync(Alias a)
+    {
+        _shortnameForId = null;
+        var name = _shortnameForm.Trim();
+        var enabled = _shortnameEnabledForm && name.Length > 0;
+        await AliasRepo.UpdateShortnameAsync(a.Id, enabled, name);
+        await Audit.WriteAsync(new AuditEntry { Action = "alias.shortname", TargetType = "alias", TargetId = a.Id.ToString(), Actor = "ui", CreatedAt = DateTimeOffset.UtcNow });
+        _flash = enabled ? $"{a.Address} now shows as \"{name}\"." : $"Shortname disabled for {a.Address}.";
+        await ReloadAsync();
+        Notifier.NotifyChanged();
+    }
+
+    private void CancelExpiry() => _expiryForId = null;
+
+    private void CancelExpiryPreview()
+    {
+        _expiryPreview = null;
+        _expiryAlias = null;
+    }
+
+    private static string LabelText(Alias a) => a.IsCatchAll ? "the catch-all" : a.Address;
+
+    private async Task ApplyExpiryAsync(Alias a)
+    {
+        var days = Math.Max(1, _expiryDaysForm);
+        _expiryForId = null;
+
+        if (!_expiryEnabledForm)
+        {
+            await AliasService.SetExpiryAsync(a.Id, false, days, deleteNow: false);
+            await AuditExpiryAsync(a.Id);
+            _flash = $"Expiry disabled for {LabelText(a)}.";
+            await ReloadAsync();
+            return;
+        }
+
+        var preview = await AliasService.ExpiryPreviewAsync(a.Id, days);
+        if (preview.Count == 0)
+        {
+            await AliasService.SetExpiryAsync(a.Id, true, days, deleteNow: false);
+            await AuditExpiryAsync(a.Id);
+            _flash = $"Enabled {days}-day expiry for {LabelText(a)} (no mail is old enough to delete yet).";
+            await ReloadAsync();
+            return;
+        }
+
+        // Old mail exists — warn with a preview before deleting anything.
+        _expiryPreview = preview;
+        _expiryAlias = a;
+        _expiryDaysConfirm = days;
+    }
+
+    private async Task ConfirmExpiryAsync()
+    {
+        if (_expiryAlias is not { } a) return;
+        _busy = true;
+        try
+        {
+            var deleted = await AliasService.SetExpiryAsync(a.Id, true, _expiryDaysConfirm, deleteNow: true);
+            await AuditExpiryAsync(a.Id);
+            _flash = $"Enabled {_expiryDaysConfirm}-day expiry for {LabelText(a)}; deleted {deleted} old message(s).";
+            CancelExpiryPreview();
+            await ReloadAsync();
+        }
+        finally { _busy = false; }
+    }
+
+    private Task AuditExpiryAsync(long aliasId) =>
+        Audit.WriteAsync(new AuditEntry { Action = "alias.expiry", TargetType = "alias", TargetId = aliasId.ToString(), Actor = "ui", CreatedAt = DateTimeOffset.UtcNow });
 
     private async Task SetColorAsync(Alias a, string color)
     {

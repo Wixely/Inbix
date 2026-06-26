@@ -1,4 +1,5 @@
 using Inbix.Core.Abstractions;
+using Inbix.Core.Domain;
 using Microsoft.Extensions.Logging;
 
 namespace Inbix.Data.Services;
@@ -53,5 +54,30 @@ public sealed class AliasService : IAliasService
         await _aliases.DeleteAsync(aliasId, ct).ConfigureAwait(false);
         _logger.LogInformation("Deleted alias {Address}; moved {Count} message(s) to the catch-all", alias.Address, migrated);
         return migrated;
+    }
+
+    public async Task<SweepPreview> ExpiryPreviewAsync(long aliasId, int days, int sampleSize = 10, CancellationToken ct = default)
+    {
+        var cutoff = DateTimeOffset.UtcNow.AddDays(-Math.Max(0, days));
+        var candidates = await _messages.ListExpiryCandidatesAsync(aliasId, cutoff, ct).ConfigureAwait(false);
+        return new SweepPreview(candidates.Count, candidates.Take(Math.Max(0, sampleSize)).ToList());
+    }
+
+    public async Task<int> SetExpiryAsync(long aliasId, bool enabled, int days, bool deleteNow, CancellationToken ct = default)
+    {
+        days = Math.Max(1, days);
+        await _aliases.UpdateExpiryAsync(aliasId, enabled, days, ct).ConfigureAwait(false);
+
+        if (!enabled || !deleteNow)
+            return 0;
+
+        var cutoff = DateTimeOffset.UtcNow.AddDays(-days);
+        var expired = await _messages.ListExpiryCandidatesAsync(aliasId, cutoff, ct).ConfigureAwait(false);
+        foreach (var m in expired)
+            await _messages.DeleteAsync(m.Id, ct).ConfigureAwait(false);
+
+        if (expired.Count > 0)
+            _logger.LogInformation("Expiry enabled on alias {AliasId} ({Days}d); deleted {Count} message(s)", aliasId, days, expired.Count);
+        return expired.Count;
     }
 }
