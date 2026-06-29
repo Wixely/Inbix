@@ -561,19 +561,26 @@ select.input { cursor: pointer; }
 /* Inbox reading pane: full MessageView inside the art-card window */
 .msg-scroll { flex: 1; overflow-y: auto; padding: 1.6rem 2.1rem; }
 
-/* Slim, themed scrollbars for the mail panes */
+/* Slim, themed scrollbars — the document (outermost) plus the mail panes */
+html,
 .dash-list, .dash-pane-scroll, .msg-scroll, .text-view {
     scrollbar-width: thin;                              /* Firefox */
     scrollbar-color: var(--border-hi) transparent;
 }
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
 .dash-list::-webkit-scrollbar,
 .dash-pane-scroll::-webkit-scrollbar,
 .msg-scroll::-webkit-scrollbar,
 .text-view::-webkit-scrollbar { width: 10px; height: 10px; }
+html::-webkit-scrollbar-track,
+body::-webkit-scrollbar-track,
 .dash-list::-webkit-scrollbar-track,
 .dash-pane-scroll::-webkit-scrollbar-track,
 .msg-scroll::-webkit-scrollbar-track,
 .text-view::-webkit-scrollbar-track { background: transparent; }
+html::-webkit-scrollbar-thumb,
+body::-webkit-scrollbar-thumb,
 .dash-list::-webkit-scrollbar-thumb,
 .dash-pane-scroll::-webkit-scrollbar-thumb,
 .msg-scroll::-webkit-scrollbar-thumb,
@@ -581,6 +588,8 @@ select.input { cursor: pointer; }
     background: var(--border-hi); border-radius: 999px;
     border: 2px solid transparent; background-clip: padding-box; /* inset, slimmer thumb */
 }
+html::-webkit-scrollbar-thumb:hover,
+body::-webkit-scrollbar-thumb:hover,
 .dash-list::-webkit-scrollbar-thumb:hover,
 .dash-pane-scroll::-webkit-scrollbar-thumb:hover,
 .msg-scroll::-webkit-scrollbar-thumb:hover,

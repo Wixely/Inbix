@@ -3,6 +3,7 @@
 @inject IAuditRepository Audit
 @inject IRawMessageStore RawStore
 @inject NavigationManager Nav
+@implements IDisposable
 
 @if (_message is null)
 {
@@ -104,7 +105,7 @@ else
         }
         else
         {
-            <pre class="text-view"><LinkifiedText Text="@_body?.TextBody" Empty="(no text body)" /></pre>
+            <pre class="text-view"><LinkifiedText Text="@_body?.TextBody" Empty="@(_message.Parsed ? "(no text body)" : "(still processing…)")" /></pre>
         }
     </div>
 }
@@ -158,6 +159,54 @@ else
             _attachments = null;
         }
         _loaded = true;
+        StartParsePolling();
+    }
+
+    // The background worker parses MIME asynchronously, so a just-received message can load with
+    // Parsed = false. Poll until it's parsed, then refresh this reader and the parent list (badge).
+    private CancellationTokenSource? _parseCts;
+
+    private void StartParsePolling()
+    {
+        _parseCts?.Cancel();
+        _parseCts?.Dispose();
+        _parseCts = null;
+        if (_message is { Parsed: false })
+        {
+            _parseCts = new CancellationTokenSource();
+            _ = PollUntilParsedAsync(_message.Id, _parseCts.Token);
+        }
+    }
+
+    private async Task PollUntilParsedAsync(long id, CancellationToken ct)
+    {
+        try
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
+            var attempts = 0;
+            while (attempts++ < 60 && await timer.WaitForNextTickAsync(ct))
+            {
+                if (id != _loadedId) return; // selection changed
+                var msg = await Messages.GetByIdAsync(id, ct);
+                if (msg is null) return;
+                if (msg.Parsed)
+                {
+                    _message = msg;
+                    _body = await Messages.GetBodyAsync(id, ct);
+                    _attachments = await Messages.ListAttachmentsAsync(id, ct);
+                    await InvokeAsync(StateHasChanged);
+                    await OnChanged.InvokeAsync(); // refresh the parent list (clears the "unparsed" badge)
+                    return;
+                }
+            }
+        }
+        catch (OperationCanceledException) { /* selection changed or component disposed */ }
+    }
+
+    public void Dispose()
+    {
+        _parseCts?.Cancel();
+        _parseCts?.Dispose();
     }
 
     private void BlockNavigate(RuleTarget target, string value)
