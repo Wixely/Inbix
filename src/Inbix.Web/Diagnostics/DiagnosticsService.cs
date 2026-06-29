@@ -6,6 +6,7 @@ using DnsClient.Protocol;
 using Inbix.Core.Abstractions;
 using Inbix.Core.Domain;
 using Inbix.Core.Options;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 
@@ -18,7 +19,7 @@ namespace Inbix.Web.Diagnostics;
 /// </summary>
 public sealed class DiagnosticsService
 {
-    private readonly IDbConnectionFactory _db;
+    private readonly IDbConnectionFactory? _db;
     private readonly IAliasRepository _aliases;
     private readonly IBackupService _backups;
     private readonly ILookupClient _dns;
@@ -27,10 +28,10 @@ public sealed class DiagnosticsService
     private readonly InbixOptions _options;
 
     public DiagnosticsService(
-        IDbConnectionFactory db, IAliasRepository aliases, IBackupService backups,
+        IServiceProvider services, IAliasRepository aliases, IBackupService backups,
         ILookupClient dns, IHttpClientFactory httpFactory, IHostEnvironment env, IOptions<InbixOptions> options)
     {
-        _db = db;
+        _db = services.GetService<IDbConnectionFactory>(); // absent in JSON mode
         _aliases = aliases;
         _backups = backups;
         _dns = dns;
@@ -81,17 +82,26 @@ public sealed class DiagnosticsService
     private async Task CheckDatabaseAsync(List<DiagnosticResult> results, CancellationToken ct)
     {
         const string cat = "Storage & data";
+
+        // JSON file/folder store: no SQL engine; report the mode and the data root.
+        if (_db is null)
+        {
+            var root = Path.GetFullPath(_options.Storage.JsonPath);
+            results.Add(new(cat, "Storage mode", DiagnosticStatus.Ok, "JSON file/folder store.", root, Sensitive: true));
+            return;
+        }
+
         try
         {
             await using var conn = await _db.OpenConnectionAsync(ct);
             await using var cmd = conn.CreateCommand();
             cmd.CommandText = "SELECT COUNT(*) FROM schema_migrations;";
             var applied = Convert.ToInt64(await cmd.ExecuteScalarAsync(ct));
-            results.Add(new(cat, "Database", DiagnosticStatus.Ok, $"Reachable ({_db.Provider}).", $"{applied} migration(s) applied."));
+            results.Add(new(cat, "Storage mode", DiagnosticStatus.Ok, $"SQLite database ({_db.Provider}).", $"{applied} migration(s) applied."));
         }
         catch (Exception ex)
         {
-            results.Add(new(cat, "Database", DiagnosticStatus.Error, "Not reachable or not migrated.", ex.Message));
+            results.Add(new(cat, "Storage mode", DiagnosticStatus.Error, "Database not reachable or not migrated.", ex.Message));
         }
     }
 

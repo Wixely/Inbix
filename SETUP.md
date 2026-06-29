@@ -239,6 +239,13 @@ and restarting Inbix.
   a network filesystem).
 - When changing modes, stop the container cleanly; you can delete a stale `inbix.db-shm` once if needed
   (never delete `inbix.db-wal` — it may hold un-checkpointed data).
+- **Strongest option for NFS/SMB:** the **JSON file/folder store** (`Inbix__Database__Provider=json`). It
+  uses no SQL engine — each email is its own JSON file written via an atomic temp-file + rename, so a crash
+  or a lying `fsync` damages at most one file instead of the whole database. See `docker-compose.json.yml`.
+  Notes: data is read into memory at startup, so after editing files on disk use **Status → Reload from
+  disk** (or `POST /api/admin/reload`); the local parts `catchall`, `catch-all` and `junk` are reserved
+  (they're folder names); and emails/identities are stored as plaintext JSON, so treat the share as a
+  secret (restrict access; the files *are* the backup unit — snapshot the directory).
 
 **Workflow**
 - Start with the **catch-all enabled** while you learn what arrives, then create real aliases for the

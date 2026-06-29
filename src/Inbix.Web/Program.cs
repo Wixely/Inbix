@@ -34,7 +34,7 @@ builder.Services.AddOptions<InbixOptions>()
     .ValidateOnStart();
 
 // Application layers.
-builder.Services.AddInbixData();   // SQLite + Dapper + migrations (provider-swappable)
+builder.Services.AddInbixData(builder.Configuration);   // SQLite / JSON store (provider-swappable)
 builder.Services.AddInbixSmtp();   // SmtpServer receiver
 builder.Services.AddInbixWorker(); // MIME parser background worker
 

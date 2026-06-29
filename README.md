@@ -33,8 +33,10 @@ It **never sends mail** — it only receives, stores, and lets you read.
   behind a replaceable `InboundMessage` boundary so the SMTP layer can be swapped for Postfix later.
 - Alias validation at `RCPT TO`: unknown/disabled recipients are rejected with `550`.
 - Fast SMTP transaction → raw MIME stored immediately → MIME parsed asynchronously by a background worker.
-- SQLite storage via Dapper, with a **version-manifest migration runner**. The data layer is abstracted
-  (`IDbConnectionFactory`) so an external database (Postgres/SQL Server) can be added without touching callers.
+- Two interchangeable storage backends (`Inbix:Database:Provider`): **`sqlite`** via Dapper with a
+  version-manifest migration runner, or a **`json` file/folder store** that tolerates network filesystems
+  (atomic per-file writes) — see [Storage providers](#storage-providers). The data layer is abstracted
+  behind repository interfaces, so callers don't change.
 - Raw MIME and attachments are stored on disk (keeps the database small; parsing can be re-run from source).
 - Blazor admin UI + JSON API (dashboard, aliases, inbox, message viewer with sandboxed HTML, audit log).
 - **Identities**: generate fake registration identities offline for major English-speaking countries
@@ -89,11 +91,13 @@ using the `__` separator (e.g. `Inbix__Smtp__Port=2525`).
 | Key | Default | Description |
 |---|---|---|
 | `Inbix:Domains` | `["mydomain.com"]` | Domains accepted for delivery |
-| `Inbix:Database:Provider` | `sqlite` | Database provider (only `sqlite` implemented) |
-| `Inbix:Database:ConnectionString` | `Data Source=./data/inbix.db` | ADO.NET connection string |
-| `Inbix:Database:MigrateOnStartup` | `true` | Apply pending migrations at startup |
+| `Inbix:Database:Provider` | `sqlite` | Storage provider: `sqlite` (embedded SQL) or `json` (file/folder store — see below) |
+| `Inbix:Database:ConnectionString` | `Data Source=./data/inbix.db` | ADO.NET connection string (SQLite only; ignored for `json`) |
+| `Inbix:Database:MigrateOnStartup` | `true` | Apply pending migrations at startup (SQLite only) |
 | `Inbix:Database:JournalMode` | `WAL` | SQLite `journal_mode`. `WAL` (default; works on NFS via exclusive locking) or `DELETE` for a rollback journal |
 | `Inbix:Database:PooledConnections` | `false` | Default `false` = a single exclusive connection, safe on a **network filesystem (NFS/SMB)**. Set `true` for pooled connection concurrency on **local disk only** — see [SETUP.md](SETUP.md#8-suggestions--tips) |
+| `Inbix:Storage:JsonPath` | `./data/store` | Root of the JSON file/folder store (when `Provider=json`) |
+| `Inbix:Storage:WriteRetrySeconds` | `5` | How long a JSON file write/move is retried on transient IO errors (NFS resilience) |
 | `Inbix:Smtp:Port` | `25` | SMTP listen port |
 | `Inbix:Smtp:ServerName` | `inbix` | EHLO/banner name |
 | `Inbix:Smtp:MaxMessageSizeBytes` | `26214400` | Max accepted message size (else `552`) |
@@ -234,6 +238,26 @@ password masked behind a reveal toggle). Deleting an identity unlinks its aliase
 the Identities page lists which aliases use each identity. Identities — including passwords — are stored
 in the database in clear text so they can be retrieved, so treat the database and backups as secrets
 (see [Security notes](#security-notes)).
+
+## Storage providers
+
+Inbix has two interchangeable storage backends, selected with `Inbix:Database:Provider`:
+
+| | `sqlite` (default) | `json` |
+|---|---|---|
+| Storage | one SQLite database file | a folder tree of JSON files |
+| Querying | real SQL via Dapper | in-memory index (loaded once at startup) |
+| On a **network filesystem (NFS/SMB)** | works with the default exclusive locking, but a SQLite file on a share is inherently riskier | **best fit** — every write is an atomic temp-file + rename, so a crash damages at most one email, never the whole dataset |
+| Backups | in-app hot snapshots (online backup API) | the files *are* the backup unit — snapshot the directory with filesystem tooling |
+
+**JSON mode layout** (`Inbix:Storage:JsonPath`, default `./data/store`): each alias is a folder under
+`mail/` (the catch-all is `catchall/`), each email is one JSON file inside it, and junked mail moves into
+a top-level `junk/` folder. Settings, rules and identities are small JSON files; the audit log is
+`audit.jsonl`. Because `catchall` and `junk` are reserved folder names, aliases can't use those local
+parts. The store is **read into memory once at startup and written through on every change** — if you edit
+files on disk (or restore a copy), use **Status → Reload from disk** (or `POST /api/admin/reload`) to
+re-read without a restart. See [`docker-compose.json.yml`](docker-compose.json.yml) for an NFS-friendly
+deployment.
 
 ## Backups & restore
 

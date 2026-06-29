@@ -264,6 +264,20 @@ public static class ApiEndpoints
             return Results.Ok(info);
         });
 
+        // --- Storage admin ---
+        // Re-read the JSON store from disk into memory (no restart). No-op/409 for SQL providers.
+        api.MapPost("/admin/reload", async (IReloadableStore store, IAuditRepository audit, CancellationToken ct) =>
+        {
+            if (!store.CanReload)
+                return Results.Conflict("This storage provider has nothing to reload.");
+            await store.ReloadAsync(ct);
+            await audit.WriteAsync(new AuditEntry
+            {
+                Action = "storage.reload", TargetType = "storage", Actor = "api", CreatedAt = DateTimeOffset.UtcNow
+            }, ct);
+            return Results.Ok(new { reloaded = true });
+        });
+
         return app;
     }
 }

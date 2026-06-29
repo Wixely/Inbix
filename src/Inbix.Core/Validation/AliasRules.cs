@@ -11,6 +11,14 @@ public static partial class AliasRules
     public const int MinLength = 1;
     public const int MaxLength = 64;
 
+    /// <summary>
+    /// Local parts that collide with reserved folder names in the JSON file/folder store (<c>catchall</c>
+    /// and <c>junk</c> are top-level folders alongside alias folders). Blocked in every provider so a
+    /// database can be switched to JSON mode without conflicts.
+    /// </summary>
+    public static readonly IReadOnlySet<string> ReservedLocalParts =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "catchall", "catch-all", "junk" };
+
     [GeneratedRegex(@"^[a-z0-9._-]+$")]
     private static partial Regex LocalPartPattern();
 
@@ -32,6 +40,9 @@ public static partial class AliasRules
 
         if (normalized.StartsWith('.') || normalized.EndsWith('.') || normalized.Contains(".."))
             return "Alias dots must be between other characters and not repeated.";
+
+        if (ReservedLocalParts.Contains(normalized))
+            return $"'{normalized}' is a reserved name and cannot be used as an alias.";
 
         return null;
     }

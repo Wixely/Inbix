@@ -34,10 +34,14 @@ public sealed class InbixOptions
 /// <summary>Database provider selection. SQLite is the default; an external DB can be slotted in later.</summary>
 public sealed class DatabaseOptions
 {
-    /// <summary>Provider key. Currently "sqlite". Reserved for "postgres"/"sqlserver" later.</summary>
+    /// <summary>
+    /// Provider key. <c>"sqlite"</c> (default) is the embedded SQL database. <c>"json"</c> switches to a
+    /// file/folder JSON store (no SQL engine) that tolerates network filesystems better — see
+    /// <see cref="StorageOptions.JsonPath"/>.
+    /// </summary>
     public string Provider { get; set; } = "sqlite";
 
-    /// <summary>ADO.NET connection string for the selected provider.</summary>
+    /// <summary>ADO.NET connection string for the selected provider (SQL providers only; ignored for "json").</summary>
     public string ConnectionString { get; set; } = "Data Source=./data/inbix.db";
 
     /// <summary>Apply pending migrations automatically on startup.</summary>
@@ -88,6 +92,21 @@ public sealed class StorageOptions
 {
     /// <summary>Directory where raw MIME messages and attachments are written.</summary>
     public string RawPath { get; set; } = "./data/raw";
+
+    /// <summary>
+    /// Root directory for the JSON file/folder store (used when <c>Database:Provider = "json"</c>).
+    /// Aliases become folders and each email is a single JSON file underneath. Safe to place on a
+    /// network filesystem: every write is an atomic temp-file + rename, so a crash damages at most one
+    /// file rather than a whole database.
+    /// </summary>
+    public string JsonPath { get; set; } = "./data/store";
+
+    /// <summary>
+    /// How long a single file write/move is retried before giving up, in seconds. Network filesystems
+    /// throw transient IO errors (e.g. ESTALE "stale file handle") that succeed on a retry; writes block
+    /// and retry with backoff up to this many seconds to avoid corrupting a file.
+    /// </summary>
+    public int WriteRetrySeconds { get; set; } = 5;
 }
 
 public sealed class BackupOptions

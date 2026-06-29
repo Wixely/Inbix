@@ -1,0 +1,42 @@
+# Example: Inbix using the JSON file/folder store instead of SQLite.
+#
+# Recommended when your persistent storage MUST live on a network filesystem (NFS/SMB). Unlike a SQLite
+# file — which is fragile on a share (stale handles, locking, whole-file corruption) — the JSON store
+# writes each email as its own file with an atomic temp-file + rename, so a crash damages at most one
+# file. There is no separate database process: everything is loaded into memory at startup and written
+# through on change. If you edit the files on disk, use Status -> "Reload from disk" (or
+# POST /api/admin/reload) to re-read without a restart.
+#
+#   docker compose -f docker-compose.json.yml up -d --build
+services:
+  inbix:
+    build: .
+    image: inbix:local
+    container_name: inbix
+    restart: unless-stopped
+    ports:
+      - "25:25"      # inbound SMTP
+      - "8080:8080"  # web UI + API
+    environment:
+      Inbix__Domains__0: "mydomain.com"
+
+      # --- JSON file/folder store ---
+      Inbix__Database__Provider: "json"
+      Inbix__Storage__JsonPath: "/data/store"     # alias folders + one JSON file per email
+      Inbix__Storage__RawPath: "/data/raw"        # raw MIME + attachment bytes
+      # Seconds a single file write/move is retried on transient IO errors (NFS resilience).
+      Inbix__Storage__WriteRetrySeconds: "5"
+
+      Inbix__Smtp__Port: "25"
+      Inbix__Admin__Password: "change-me"
+      ASPNETCORE_ENVIRONMENT: "Production"
+
+      # In-app backups don't apply to the JSON store — the files are the backup unit; snapshot /data.
+      Inbix__Backups__Enabled: "false"
+    volumes:
+      # All state (JSON store + raw bytes + DataProtection keys) under one mount. This is the volume to
+      # point at your NFS/SMB share.
+      - inbix-data:/data
+
+volumes:
+  inbix-data:
