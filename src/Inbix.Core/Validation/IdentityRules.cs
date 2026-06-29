@@ -1,4 +1,5 @@
 using Inbix.Core.Domain;
+using Inbix.Core.Identities;
 
 namespace Inbix.Core.Validation;
 
@@ -21,8 +22,7 @@ public static class IdentityRules
         if (i.Username.Length > MaxFieldLength || i.Password.Length > MaxFieldLength)
             return $"Username and password must be at most {MaxFieldLength} characters.";
 
-        var country = i.Country?.ToLowerInvariant();
-        if (country != "uk" && country != "us") return "Region must be 'uk' or 'us'.";
+        if (!Countries.IsSupported(i.Country?.ToLowerInvariant())) return "Unknown region.";
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         if (i.DateOfBirth == default) return "Date of birth is required.";

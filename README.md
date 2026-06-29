@@ -14,12 +14,14 @@ It **never sends mail** — it only receives, stores, and lets you read.
 
 | | |
 |:--:|:--:|
-| Recent-mail dashboard | Mailbox with a message open |
+| Recent-mail dashboard | Mailbox — message + linked identity |
 | ![Dashboard](docs/screenshots/dashboard.png) | ![Mailbox](docs/screenshots/inbox.png) |
-| Aliases — per-mailbox colour, shortname &amp; expiry | Rules — sender/recipient blacklisting |
-| ![Aliases](docs/screenshots/aliases.png) | ![Rules](docs/screenshots/rules.png) |
-| Junk inbox — rule-tagged, with manual overrides | Status — configuration &amp; DNS diagnostics |
-| ![Junk](docs/screenshots/junk.png) | ![Status](docs/screenshots/status.png) |
+| Aliases — colour, shortname, expiry &amp; linked identity | Identities — offline profiles linked to aliases |
+| ![Aliases](docs/screenshots/aliases.png) | ![Identities](docs/screenshots/identities.png) |
+| Rules — sender/recipient blacklisting | Junk inbox — rule-tagged, with manual overrides |
+| ![Rules](docs/screenshots/rules.png) | ![Junk](docs/screenshots/junk.png) |
+| Status — configuration &amp; DNS diagnostics | |
+| ![Status](docs/screenshots/status.png) | |
 
 > Screenshots use the built-in sample data (`Inbix:SeedSampleData=true`).
 

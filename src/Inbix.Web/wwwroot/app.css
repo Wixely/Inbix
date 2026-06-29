@@ -698,3 +698,7 @@ body::-webkit-scrollbar-thumb:hover,
     background: var(--violet-soft); color: var(--violet); border: 1px solid rgba(139, 124, 246, 0.3);
 }
 .id-chip:hover { border-color: var(--violet); }
+
+/* Click-to-reveal for sensitive values (e.g. filesystem paths) */
+.reveal-text { font-family: var(--font-mono); word-break: break-all; }
+.reveal-toggle { font-size: 0.78rem; }

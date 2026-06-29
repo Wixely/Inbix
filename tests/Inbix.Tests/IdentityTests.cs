@@ -79,6 +79,18 @@ public sealed class IdentityTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public void Validate_Accepts_Every_Supported_Country()
+    {
+        var gen = new RandomIdentityGenerator();
+        foreach (var (code, _) in Countries.All)
+        {
+            var id = gen.Generate(new GenerateOptions { Countries = [code] });
+            Assert.Equal(code, id.Country);
+            Assert.Null(IdentityRules.Validate(id)); // a generated identity must always be saveable
+        }
+    }
+
+    [Fact]
     public void Generator_Empty_Region_Falls_Back_To_Defaults()
     {
         var id = new RandomIdentityGenerator().Generate(new GenerateOptions { Countries = [] });

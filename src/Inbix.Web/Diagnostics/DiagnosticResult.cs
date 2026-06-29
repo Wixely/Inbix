@@ -8,4 +8,5 @@ public sealed record DiagnosticResult(
     string Name,
     DiagnosticStatus Status,
     string Message,
-    string? Detail = null);
+    string? Detail = null,
+    bool Sensitive = false); // Detail is a filesystem path etc. — hide behind a click in the UI

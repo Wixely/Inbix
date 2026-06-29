@@ -1,0 +1,21 @@
+@* Hides sensitive text (e.g. filesystem paths) behind a click — privacy against shoulder-surfing
+   and screenshots. The value is still in the DOM only once revealed. *@
+
+@if (_revealed)
+{
+    <span class="reveal-text">@Text</span>
+    <button type="button" class="btn-link reveal-toggle" @onclick="() => _revealed = false">Hide</button>
+}
+else
+{
+    <button type="button" class="btn-link reveal-toggle" @onclick="() => _revealed = true">@CollapsedLabel</button>
+}
+
+@code {
+    [Parameter, EditorRequired] public string? Text { get; set; }
+
+    /// <summary>Label for the collapsed (hidden) state.</summary>
+    [Parameter] public string CollapsedLabel { get; set; } = "Show";
+
+    private bool _revealed;
+}

@@ -105,11 +105,11 @@ public sealed class DiagnosticsService
             var probe = Path.Combine(path, $".inbix-write-test-{Guid.NewGuid():N}");
             File.WriteAllText(probe, "ok");
             File.Delete(probe);
-            results.Add(new(cat, "Raw storage", DiagnosticStatus.Ok, "Writable.", path));
+            results.Add(new(cat, "Raw storage", DiagnosticStatus.Ok, "Writable.", path, Sensitive: true));
         }
         catch (Exception ex)
         {
-            results.Add(new(cat, "Raw storage", DiagnosticStatus.Error, "Not writable.", $"{path}: {ex.Message}"));
+            results.Add(new(cat, "Raw storage", DiagnosticStatus.Error, "Not writable.", $"{path}: {ex.Message}", Sensitive: true));
         }
     }
 
@@ -190,7 +190,7 @@ public sealed class DiagnosticsService
 
         if (!File.Exists(smtp.CertificatePath))
         {
-            results.Add(new(cat, "STARTTLS", DiagnosticStatus.Error, "Certificate file not found.", smtp.CertificatePath));
+            results.Add(new(cat, "STARTTLS", DiagnosticStatus.Error, "Certificate file not found.", smtp.CertificatePath, Sensitive: true));
             return;
         }
 

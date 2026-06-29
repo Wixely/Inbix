@@ -52,7 +52,16 @@ else
                                 @r.Message
                                 @if (!string.IsNullOrEmpty(r.Detail))
                                 {
-                                    <div class="muted status-detail">@r.Detail</div>
+                                    <div class="muted status-detail">
+                                        @if (r.Sensitive)
+                                        {
+                                            <RevealText Text="@r.Detail" CollapsedLabel="Show path" />
+                                        }
+                                        else
+                                        {
+                                            @r.Detail
+                                        }
+                                    </div>
                                 }
                             </td>
                         </tr>
