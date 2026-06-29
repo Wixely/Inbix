@@ -21,7 +21,7 @@ It **never sends mail** — it only receives, stores, and lets you read.
 | Rules — sender/recipient blacklisting | Junk inbox — rule-tagged, with manual overrides |
 | ![Rules](docs/screenshots/rules.png) | ![Junk](docs/screenshots/junk.png) |
 | Status — configuration &amp; DNS diagnostics | |
-| ![Status](docs/screenshots/status.png) | |
+| ![Status](docs/screenshots/diagnostics.png) | |
 
 > Screenshots use the built-in sample data (`Inbix:SeedSampleData=true`).
 
