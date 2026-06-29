@@ -44,23 +44,22 @@ public sealed class DatabaseOptions
     public bool MigrateOnStartup { get; set; } = true;
 
     /// <summary>
-    /// SQLite journal mode (<c>PRAGMA journal_mode</c>). "WAL" (default) is fastest on local disk.
-    /// On a network filesystem use "WAL" together with <see cref="ExclusiveLocking"/>, or "DELETE"
-    /// for a rollback journal that relies only on POSIX file locks. Whitelisted at startup.
+    /// SQLite journal mode (<c>PRAGMA journal_mode</c>). "WAL" (default) is fastest; with the default
+    /// exclusive locking it also works on network filesystems. "DELETE" uses a rollback journal that
+    /// relies only on POSIX file locks. Whitelisted at startup.
     /// </summary>
     public string JournalMode { get; set; } = "WAL";
 
     /// <summary>
-    /// Use SQLite exclusive locking (<c>PRAGMA locking_mode=EXCLUSIVE</c>) behind a single shared
-    /// connection. Set this to <c>true</c> when the database file lives on a <b>network filesystem
-    /// (NFS/SMB)</b>: WAL's shared-memory index (the <c>-shm</c> file) is unavailable there, so SQLite
-    /// otherwise fails with "unable to open database file" / "locking protocol". In exclusive mode
-    /// SQLite keeps the WAL index in heap memory instead, which works without shared memory — at the
-    /// cost of funnelling all access through one connection (no write concurrency). Leave <c>false</c>
-    /// (the default) for local disk. SQLite on a network filesystem is still inherently riskier than
-    /// local storage; prefer keeping the live DB local and backing up to the share where possible.
+    /// By <b>default</b> Inbix uses SQLite exclusive locking (<c>PRAGMA locking_mode=EXCLUSIVE</c> behind a
+    /// single shared connection), so the database works on local disk <i>and</i> on a <b>network filesystem
+    /// (NFS/SMB)</b> — where WAL's shared-memory <c>-shm</c> index is unavailable and SQLite would otherwise
+    /// fail with "unable to open database file" / "locking protocol". Set this to <c>true</c> to instead use
+    /// pooled, per-call connections for maximum read/write concurrency on <b>local disk</b>; do NOT enable it
+    /// when the database is on a network filesystem. (SQLite on a network filesystem is still riskier than
+    /// local storage — prefer keeping the live DB local and backing up to the share where possible.)
     /// </summary>
-    public bool ExclusiveLocking { get; set; }
+    public bool PooledConnections { get; set; }
 }
 
 public sealed class SmtpOptions

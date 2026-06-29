@@ -33,7 +33,7 @@ public sealed class ExclusiveLockingTests : IDisposable
             {
                 Provider = "sqlite",
                 ConnectionString = $"Data Source={Path.Combine(_tempDir, "test.db")}",
-                ExclusiveLocking = exclusive,
+                PooledConnections = !exclusive,
                 JournalMode = journalMode
             },
             Storage = { RawPath = Path.Combine(_tempDir, "raw") },

@@ -21,13 +21,14 @@ services:
       # All persistent state (SQLite db, raw MIME/attachments, backups, DataProtection keys)
       # defaults to /data in the image, so the single volume below is the only mount needed.
 
-      # --- Network filesystem (NFS/SMB) for /data ---
-      # SQLite's default WAL mode needs a shared-memory (-shm) file, which network filesystems cannot
-      # provide — symptoms are "unable to open database file" (14) and "locking protocol" (15). If /data
-      # is on NFS/SMB, set ExclusiveLocking=true: SQLite then keeps the WAL index in heap memory and
-      # serialises all access through one connection, which works without shared memory. Local disk is
-      # still preferable (and the default false); see SETUP.md "Storage on a network filesystem".
-      # Inbix__Database__ExclusiveLocking: "true"
+      # --- Storage on a network filesystem (NFS/SMB) for /data ---
+      # Works out of the box: Inbix defaults to SQLite exclusive locking (one shared connection, WAL index
+      # kept in heap rather than a -shm file), which is what makes it usable on NFS/SMB — where the default
+      # WAL otherwise fails with "unable to open database file" (14) / "locking protocol" (15). Local disk
+      # is still preferable; see SETUP.md "Storage on a network filesystem".
+      # On LOCAL DISK only, you can opt into pooled connections for more read/write concurrency
+      # (do NOT enable on a network filesystem):
+      # Inbix__Database__PooledConnections: "true"
       # Inbix__Database__JournalMode: "WAL"   # or "DELETE" for a rollback journal (no WAL)
 
       # Scheduled database backups (online/consistent), stored under /data/backups.

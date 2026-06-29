@@ -13,13 +13,13 @@ namespace Inbix.Data.Sqlite;
 ///
 /// Two modes:
 /// <list type="bullet">
-/// <item><b>Default (local disk):</b> a fresh pooled connection per call — full read/write concurrency.</item>
-/// <item><b>Exclusive locking</b> (<see cref="DatabaseOptions.ExclusiveLocking"/>=true, for network
-/// filesystems): a single shared connection guarded by a one-at-a-time gate. <c>locking_mode=EXCLUSIVE</c>
-/// is applied <i>before</i> WAL so SQLite keeps the WAL index in heap memory rather than a <c>-shm</c>
-/// file, which is what allows WAL to work on NFS/SMB. Each <see cref="OpenConnectionAsync"/> hands out a
-/// non-owning <see cref="LeasedSqliteConnection"/> whose disposal releases the gate (the shared
-/// connection stays open to hold the exclusive lock).</item>
+/// <item><b>Exclusive locking (default):</b> a single shared connection guarded by a one-at-a-time gate.
+/// <c>locking_mode=EXCLUSIVE</c> is applied <i>before</i> WAL so SQLite keeps the WAL index in heap memory
+/// rather than a <c>-shm</c> file — which is what allows WAL to work on NFS/SMB. Each
+/// <see cref="OpenConnectionAsync"/> hands out a non-owning <see cref="LeasedSqliteConnection"/> whose
+/// disposal releases the gate (the shared connection stays open to hold the exclusive lock).</item>
+/// <item><b>Pooled</b> (<see cref="DatabaseOptions.PooledConnections"/>=true, local disk only): a fresh
+/// pooled connection per call — full read/write concurrency, but unsafe on a network filesystem.</item>
 /// </list>
 /// </summary>
 public sealed class SqliteConnectionFactory : IDbConnectionFactory, IAsyncDisposable, IDisposable
@@ -40,7 +40,7 @@ public sealed class SqliteConnectionFactory : IDbConnectionFactory, IAsyncDispos
     public SqliteConnectionFactory(IOptions<InbixOptions> options)
     {
         var db = options.Value.Database;
-        _exclusive = db.ExclusiveLocking;
+        _exclusive = !db.PooledConnections; // exclusive locking is the default; opt out for local-disk pooling
 
         var journalMode = (db.JournalMode ?? "WAL").Trim();
         if (!AllowedJournalModes.Contains(journalMode))
