@@ -39,8 +39,7 @@ public sealed class FileSystemRawMessageStore : IRawMessageStore
     public Task<Stream> OpenReadAsync(string storagePath, CancellationToken ct = default)
     {
         var full = ResolveInsideRoot(storagePath);
-        Stream stream = new FileStream(full, FileMode.Open, FileAccess.Read, FileShare.Read);
-        return Task.FromResult(stream);
+        return RetryAsync<Stream>(() => new FileStream(full, FileMode.Open, FileAccess.Read, FileShare.Read), ct);
     }
 
     public Task DeleteAsync(string storagePath, CancellationToken ct = default)
@@ -60,13 +59,46 @@ public sealed class FileSystemRawMessageStore : IRawMessageStore
         return Task.CompletedTask;
     }
 
-    private async Task WriteAsync(string relativePath, ReadOnlyMemory<byte> bytes, CancellationToken ct)
+    private Task WriteAsync(string relativePath, ReadOnlyMemory<byte> bytes, CancellationToken ct)
     {
         var full = ResolveInsideRoot(relativePath);
-        Directory.CreateDirectory(Path.GetDirectoryName(full)!);
-        await using var fs = new FileStream(full, FileMode.CreateNew, FileAccess.Write, FileShare.None);
-        await fs.WriteAsync(bytes, ct).ConfigureAwait(false);
-        await fs.FlushAsync(ct).ConfigureAwait(false);
+        // FileMode.Create (not CreateNew) so a retry after a partial write is idempotent; the path is a
+        // unique GUID so there is nothing to clobber.
+        return RetryAsync(async () =>
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+            await using var fs = new FileStream(full, FileMode.Create, FileAccess.Write, FileShare.None);
+            await fs.WriteAsync(bytes, ct).ConfigureAwait(false);
+            await fs.FlushAsync(ct).ConfigureAwait(false);
+        }, ct);
+    }
+
+    // Network filesystems (NFS/SMB) throw transient IO errors — notably ESTALE ("stale file handle") —
+    // that succeed once the client re-resolves the path. Retry a few times with a short backoff.
+    private const int MaxIoAttempts = 4;
+
+    private static async Task RetryAsync(Func<Task> action, CancellationToken ct)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try { await action().ConfigureAwait(false); return; }
+            catch (IOException) when (attempt < MaxIoAttempts)
+            {
+                await Task.Delay(attempt * 150, ct).ConfigureAwait(false);
+            }
+        }
+    }
+
+    private static async Task<T> RetryAsync<T>(Func<T> action, CancellationToken ct)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try { return action(); }
+            catch (IOException) when (attempt < MaxIoAttempts)
+            {
+                await Task.Delay(attempt * 150, ct).ConfigureAwait(false);
+            }
+        }
     }
 
     private string ResolveInsideRoot(string relativePath)
