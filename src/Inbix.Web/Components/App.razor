@@ -30,6 +30,14 @@
     <script>
         // Minimal clipboard helper for the "Copy" buttons (identities page, linked-identity panel).
         window.inbixCopy = (text) => { try { navigator.clipboard.writeText(text); } catch (e) { } };
+
+        // Close the mobile nav drawer after tapping a link or the backdrop (render-mode-agnostic).
+        document.addEventListener('click', (e) => {
+            if (e.target.closest('.sidebar a, .nav-backdrop')) {
+                const t = document.getElementById('nav-toggle');
+                if (t) t.checked = false;
+            }
+        });
     </script>
     <script src="_framework/blazor.web.js"></script>
 </body>

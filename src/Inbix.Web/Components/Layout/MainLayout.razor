@@ -1,6 +1,14 @@
 @inherits LayoutComponentBase
 
 <div class="layout">
+    @* Pure-CSS drawer toggle: the hamburger label flips this checkbox; CSS slides the sidebar in. *@
+    <input type="checkbox" id="nav-toggle" class="nav-toggle" autocomplete="off" />
+    <header class="topbar">
+        <label for="nav-toggle" class="nav-burger" aria-label="Toggle menu">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" /></svg>
+        </label>
+        <span class="brand-name">Inbix</span>
+    </header>
     <aside class="sidebar">
         <div class="brand">
             <span class="brand-mark">
@@ -26,6 +34,7 @@
             <SidebarStatus @rendermode="InteractiveServer" />
         </div>
     </aside>
+    <label for="nav-toggle" class="nav-backdrop" aria-hidden="true"></label>
     <main class="content">
         @Body
     </main>

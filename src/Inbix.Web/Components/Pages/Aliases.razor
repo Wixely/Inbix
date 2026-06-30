@@ -29,6 +29,7 @@
 }
 else
 {
+    <div class="table-wrap">
     <table class="grid">
         <thead>
             <tr><th>Address</th><th>Status</th><th>Created</th><th>Notes</th><th>Expiry</th><th>Shortname</th><th class="actions-col"></th></tr>
@@ -108,6 +109,7 @@ else
             }
         </tbody>
     </table>
+    </div>
 
     @if (_expiryPreview is not null && _expiryAlias is { } xa)
     {
