@@ -1,10 +1,22 @@
 # Inbix
 
-Inbound-only **alias mail server** for permanent addresses such as `spotify@mydomain.com`,
-`github@mydomain.com`, `amazon@mydomain.com`. Inbix receives real email over SMTP, accepts only
-known aliases, stores the full message, and exposes it through a read-only web UI and API.
+**Use a different email address for every account you register — infinite emails, and protection when breaches and leaks occur.**
 
-It **never sends mail** — it only receives, stores, and lets you read.
+Inbix is a self-hosted, inbound-only **alias mail server** built for signing up to websites. Point your
+domain at it and you get **effectively unlimited email addresses**: hand each service its own —
+`spotify@mydomain.com`, `github@mydomain.com`, `tiktok@mydomain.com` — with no inbox to create per alias.
+
+The point is to shrink your blast radius. Today most people reuse one email everywhere, so when a website
+is breached and its database leaks (or it wasn't trustworthy to begin with), that single address turns up in public
+dumps and ties all your accounts together — ready for credential-stuffing and targeted phishing. With
+Inbix, every site only ever knows a unique, single-purpose address. A leak exposes *that one* alias and
+nothing else: you can see exactly who leaked it, blacklist or disable it in one click, and the rest of
+your accounts stay unlinkable. Pair each alias with a saved registration **identity** — a distinct
+username, password and profile per site — and a breach of one account gives an attacker no foothold on any
+other.
+
+Inbix receives real mail over SMTP, accepts only the aliases you've defined (or a catch-all), stores each
+message in full, and serves it back through a fast read-only web UI and API. Note that Inbix cannot send email, so bear that in mind for accounts you take seriously and may eventually need to send mail from. It's also not designed to be permanent storage for your email — it's built for signups, disposable mail, password resets, 2FA codes and confirmation messages. It also has a blocklist: when an address gets burned you can block it, and any further mail to it gets a "550 mailbox unavailable" reply. Spammers are punished for sending to unavailable mailboxes, so they're incentivized to drop the address from their lists — giving you a chance to stop the endless deluge of spam without "deleting" your email account.
 
 > Built entirely in C# on ASP.NET Core / .NET 10. Runs as a Windows Service or in Docker.
 
@@ -16,7 +28,7 @@ It **never sends mail** — it only receives, stores, and lets you read.
 |:--:|:--:|
 | Recent-mail dashboard | Mailbox — message + linked identity |
 | ![Dashboard](docs/screenshots/dashboard.png) | ![Mailbox](docs/screenshots/inbox.png) |
-| Aliases — colour, shortname, expiry &amp; linked identity | Identities — offline profiles linked to aliases |
+| Aliases — color, shortname, expiry &amp; linked identity | Identities — offline profiles linked to aliases |
 | ![Aliases](docs/screenshots/aliases.png) | ![Identities](docs/screenshots/identities.png) |
 | Rules — sender/recipient blacklisting | Junk inbox — rule-tagged, with manual overrides |
 | ![Rules](docs/screenshots/rules.png) | ![Junk](docs/screenshots/junk.png) |
@@ -328,7 +340,7 @@ The host calls `UseWindowsService()`, so it runs correctly under the Windows Ser
 
 ```
 MX    mydomain.com       -> mail.mydomain.com   (priority 10)
-A/CNAME mail.mydomain.com -> your public IP / DDNS hostname   (grey cloud / DNS-only)
+A/CNAME mail.mydomain.com -> your public IP / DDNS hostname   (gray cloud / DNS-only)
 ```
 
 Port 25 must be reachable from the internet. **Verify your ISP allows inbound port 25 before relying on this.**
