@@ -17,15 +17,17 @@ public sealed class MimeParserWorker : BackgroundService
 {
     private readonly IMessageRepository _messages;
     private readonly IRawMessageStore _rawStore;
+    private readonly IInboxNotifier _notifier;
     private readonly WorkerOptions _options;
     private readonly ILogger<MimeParserWorker> _logger;
 
     public MimeParserWorker(
-        IMessageRepository messages, IRawMessageStore rawStore,
+        IMessageRepository messages, IRawMessageStore rawStore, IInboxNotifier notifier,
         IOptions<InbixOptions> options, ILogger<MimeParserWorker> logger)
     {
         _messages = messages;
         _rawStore = rawStore;
+        _notifier = notifier;
         _options = options.Value.Worker;
         _logger = logger;
     }
@@ -60,7 +62,11 @@ public sealed class MimeParserWorker : BackgroundService
     {
         var batch = await _messages.ClaimUnparsedAsync(_options.BatchSize, ct).ConfigureAwait(false);
         foreach (var message in batch)
+        {
             await ProcessOneAsync(message, ct).ConfigureAwait(false);
+            // Whether it parsed or failed, the message changed — tell any open inbox/dashboard to refresh.
+            _notifier.NotifyUpdated(message.Id, message.AliasId, junked: message.JunkedAt is not null);
+        }
         return batch.Count;
     }
 

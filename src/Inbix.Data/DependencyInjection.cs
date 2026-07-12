@@ -58,6 +58,7 @@ public static class DependencyInjection
         services.AddSingleton<IIdentityGenerator, RandomIdentityGenerator>();
         services.AddSingleton<IRawMessageStore, FileSystemRawMessageStore>();
         services.AddSingleton<IAliasResolver, CachingAliasResolver>();
+        services.AddSingleton<IInboxNotifier, InboxNotifier>();
         services.AddSingleton<IInboundMessageSink, InboundMessageSink>();
         services.AddHostedService<SampleDataSeeder>();
         services.AddHostedService<MessageRetentionHostedService>();

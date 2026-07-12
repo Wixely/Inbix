@@ -19,6 +19,7 @@ public sealed class InboundMessageSink : IInboundMessageSink
     private readonly IMessageRepository _messages;
     private readonly IRawMessageStore _rawStore;
     private readonly IBlacklistMatcher _matcher;
+    private readonly IInboxNotifier _notifier;
     private readonly InbixOptions _options;
     private readonly ILogger<InboundMessageSink> _logger;
 
@@ -27,6 +28,7 @@ public sealed class InboundMessageSink : IInboundMessageSink
         IMessageRepository messages,
         IRawMessageStore rawStore,
         IBlacklistMatcher matcher,
+        IInboxNotifier notifier,
         IOptions<InbixOptions> options,
         ILogger<InboundMessageSink> logger)
     {
@@ -34,6 +36,7 @@ public sealed class InboundMessageSink : IInboundMessageSink
         _messages = messages;
         _rawStore = rawStore;
         _matcher = matcher;
+        _notifier = notifier;
         _options = options.Value;
         _logger = logger;
     }
@@ -101,6 +104,7 @@ public sealed class InboundMessageSink : IInboundMessageSink
 
             var id = await _messages.CreateAsync(row, ct).ConfigureAwait(false);
             _logger.LogInformation("Stored message {MessageId} for {Recipient} ({Size} bytes)", id, message.Recipient, message.SizeBytes);
+            _notifier.NotifyArrived(id, aliasId, junked: junkedAt is not null);
             return InboundSaveResult.Stored;
         }
         catch (Exception ex)

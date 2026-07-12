@@ -2,6 +2,7 @@
 @rendermode InteractiveServer
 @implements IDisposable
 @inject IMessageRepository Messages
+@inject IInboxNotifier Inbox
 @inject NavigationManager Nav
 
 <div class="page-head"><h1>Recent mail</h1></div>
@@ -9,11 +10,11 @@
     The 10 latest messages across all mailboxes.
     @if (_userInteracted)
     {
-        <span>Auto-refresh paused while you read.</span>
+        <span>Updates in real time. Auto-open paused while you read.</span>
     }
     else
     {
-        <span>Auto-refreshing every 20s — newest opens automatically.</span>
+        <span>Updates in real time — newest opens automatically.</span>
     }
 </p>
 
@@ -84,8 +85,25 @@
 
     protected override async Task OnInitializedAsync()
     {
+        Inbox.Received += OnInboxEvent;   // real-time push when mail arrives / finishes parsing
         await RefreshAsync();
         _timer = new System.Threading.Timer(_ => _ = TickAsync(), null, RefreshInterval, RefreshInterval);
+    }
+
+    // Fired off the UI thread by the SMTP intake / parser worker. Reload the recent list (keeping the
+    // reader's selection) so new mail appears instantly for anyone on the dashboard.
+    private async void OnInboxEvent(InboxEvent e)
+    {
+        if (e.Junked) return; // junked mail isn't shown on the dashboard
+        try
+        {
+            await InvokeAsync(async () =>
+            {
+                await RefreshAsync();
+                StateHasChanged();
+            });
+        }
+        catch { /* circuit tearing down or transient error */ }
     }
 
     private async Task TickAsync()
@@ -131,5 +149,9 @@
             Nav.NavigateTo($"aliases/{_selected.AliasId}/inbox?m={_selected.Id}");
     }
 
-    public void Dispose() => _timer?.Dispose();
+    public void Dispose()
+    {
+        Inbox.Received -= OnInboxEvent;
+        _timer?.Dispose();
+    }
 }

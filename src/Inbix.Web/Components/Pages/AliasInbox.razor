@@ -1,7 +1,9 @@
 @page "/aliases/{AliasId:long}/inbox"
 @rendermode InteractiveServer
+@implements IDisposable
 @inject IAliasRepository AliasRepo
 @inject IMessageRepository Messages
+@inject IInboxNotifier Inbox
 
 @if (_alias is null)
 {
@@ -66,6 +68,28 @@ else
     private long _loadedAliasId = -1;
 
     private string Title => _alias is null ? "" : _alias.IsCatchAll ? "Catch-all" : _alias.DisplayName;
+
+    protected override void OnInitialized() => Inbox.Received += OnInboxEvent;
+
+    // Fired off the UI thread when mail arrives / finishes parsing. Live-refresh this inbox's list if the
+    // event is for this mailbox, keeping the current selection.
+    private async void OnInboxEvent(InboxEvent e)
+    {
+        if (e.AliasId != AliasId || e.Junked) return; // other mailbox, or junked (belongs in Junk)
+        try
+        {
+            await InvokeAsync(async () =>
+            {
+                _items = await Messages.ListByAliasWithPreviewAsync(AliasId, 100, 0);
+                if (_selectedId is null && _items.Count > 0)
+                    _selectedId = _items[0].Id; // open the newest if nothing is selected yet
+                StateHasChanged();
+            });
+        }
+        catch { /* circuit tearing down or transient error */ }
+    }
+
+    public void Dispose() => Inbox.Received -= OnInboxEvent;
 
     // After a junk/unjunk/delete in the reader, reload the list (the message may leave this inbox) and keep a valid selection.
     private async Task OnMessageChangedAsync()
