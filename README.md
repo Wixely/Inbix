@@ -304,12 +304,19 @@ See [`docker-compose.yml`](docker-compose.yml) for the sample configuration.
 
 | Path | Contents |
 |---|---|
-| `/data/inbix.db` (+ `-wal`/`-shm`) | SQLite database |
+| `/data/inbix.db` (+ `-wal`/`-shm`) | SQLite database (when `Provider=sqlite`) |
+| `/data/store` | JSON file/folder store — one file per email (when `Provider=json`) |
 | `/data/raw` | raw MIME messages and attachments |
 | `/data/backups` | database backups (when enabled) |
 | `/data/keys` | DataProtection keys (so logins survive container recreation) |
 
-The image sets these paths by default, so `docker run -v inbix-data:/data …` is enough.
+The image sets **all** of these paths (including `JsonPath=/data/store`) by default, so
+`docker run -v inbix-data:/data …` is enough for either provider — mount the **whole** `/data`, not a
+subfolder. If you ever mount only `/data/raw`, the index (DB or JSON store) lives in the container's
+throw-away layer and is **lost on the next update**; the raw `.eml` files survive but the inbox goes
+empty. To rebuild the inbox from surviving raw files, use **Status → Re-index from raw** (or
+`POST /api/admin/reindex`): it re-creates entries for any raw message missing from the index (routing is
+reconstructed from headers — mail whose original alias is gone lands in the catch-all).
 
 ### Releasing an image
 

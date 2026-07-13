@@ -309,4 +309,12 @@ public sealed class MessageRepository : IMessageRepository
         foreach (var path in attachmentPaths)
             await _rawStore.DeleteAsync(path, ct).ConfigureAwait(false);
     }
+
+    public async Task<IReadOnlyList<string>> ListRawStoragePathsAsync(CancellationToken ct = default)
+    {
+        await using var c = await _factory.OpenConnectionAsync(ct).ConfigureAwait(false);
+        var rows = await c.QueryAsync<string>(
+            "SELECT raw_storage_path FROM messages WHERE raw_storage_path IS NOT NULL;").ConfigureAwait(false);
+        return rows.ToList();
+    }
 }

@@ -59,6 +59,16 @@ public sealed class FileSystemRawMessageStore : IRawMessageStore
         return Task.CompletedTask;
     }
 
+    public IReadOnlyList<string> EnumerateRawKeys()
+    {
+        // Raw MIME files are written as "*.eml"; attachments have no extension, so this excludes them.
+        if (!Directory.Exists(_root)) return [];
+        var keys = new List<string>();
+        foreach (var full in Directory.EnumerateFiles(_root, "*.eml", SearchOption.AllDirectories))
+            keys.Add(ToPosix(Path.GetRelativePath(_root, full)));
+        return keys;
+    }
+
     private Task WriteAsync(string relativePath, ReadOnlyMemory<byte> bytes, CancellationToken ct)
     {
         var full = ResolveInsideRoot(relativePath);

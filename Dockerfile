@@ -41,12 +41,17 @@ COPY --from=build /app ./
 ENV ASPNETCORE_URLS=http://+:8080
 
 # All persistent state lives under /data so a single mount captures everything:
-#   /data/inbix.db          SQLite database (+ -wal/-shm)
+#   /data/inbix.db          SQLite database (+ -wal/-shm) — when Provider=sqlite
+#   /data/store             JSON file/folder store (one file per email) — when Provider=json
 #   /data/raw               raw MIME messages and attachments
 #   /data/backups           database backups (when enabled)
 #   /data/keys              DataProtection keys (sign the auth cookie)
+# Note: JsonPath is pinned to /data/store here so switching to Provider=json persists under the same
+# single mount. Without this it would default to the *relative* ./data/store (i.e. /app/data/store),
+# which is inside the container and lost on every update/recreation.
 ENV Inbix__Database__ConnectionString="Data Source=/data/inbix.db"
 ENV Inbix__Storage__RawPath="/data/raw"
+ENV Inbix__Storage__JsonPath="/data/store"
 ENV Inbix__Backups__Directory="/data/backups"
 ENV Inbix__DataProtectionKeysPath="/data/keys"
 

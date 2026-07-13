@@ -192,6 +192,13 @@ public sealed class JsonMessageRepository : IMessageRepository
                 await _rawStore.DeleteAsync(path, c).ConfigureAwait(false);
         }, ct);
 
+    public Task<IReadOnlyList<string>> ListRawStoragePathsAsync(CancellationToken ct = default) =>
+        _store.ReadAsync(() => (IReadOnlyList<string>)_store.Messages.Values
+            .Select(m => m.RawStoragePath)
+            .Where(p => !string.IsNullOrEmpty(p))
+            .Select(p => p!)
+            .ToList(), ct);
+
     private Task<int> Reassign(Func<StoredMessage, bool> predicate, long toAliasId, CancellationToken ct) =>
         _store.WriteAsync(async c =>
         {

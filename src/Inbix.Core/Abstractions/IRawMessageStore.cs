@@ -17,4 +17,7 @@ public interface IRawMessageStore
 
     /// <summary>Delete previously stored bytes. Best-effort; a no-op if the file is already gone.</summary>
     Task DeleteAsync(string storagePath, CancellationToken ct = default);
+
+    /// <summary>Provider-relative paths of every stored raw MIME message (not attachments). For re-indexing.</summary>
+    IReadOnlyList<string> EnumerateRawKeys();
 }

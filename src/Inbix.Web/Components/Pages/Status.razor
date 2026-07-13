@@ -1,9 +1,12 @@
 @page "/status"
 @rendermode InteractiveServer
 @using Inbix.Core.Abstractions
+@using Inbix.Core.Domain
 @using Inbix.Web.Diagnostics
 @inject DiagnosticsService Diagnostics
 @inject IReloadableStore Store
+@inject IRawReindexer Reindexer
+@inject IAuditRepository Audit
 
 <h1>Status</h1>
 <p class="lead">Run configuration diagnostics to catch common inbound-mail misconfigurations — database,
@@ -20,6 +23,10 @@ storage, aliases, TLS, the SMTP listener, and DNS (public IP, MX records, MX→I
             @(_reloading ? "Reloading…" : "Reload from disk")
         </button>
     }
+    <button class="btn btn-ghost" @onclick="() => _confirmReindex = true" disabled="@(_reindexing || _confirmReindex)"
+            title="Recover mail from the raw store when the index is missing entries">
+        Re-index from raw
+    </button>
     @if (_results is not null)
     {
         <span class="status-summary">
@@ -29,6 +36,30 @@ storage, aliases, TLS, the SMTP listener, and DNS (public IP, MX records, MX→I
         </span>
     }
 </div>
+
+@if (_confirmReindex)
+{
+    <div class="panel">
+        <h2>Re-index from raw storage?</h2>
+        <p class="muted">
+            This scans the raw message store and re-creates inbox entries for any emails that are missing
+            from the index — for example after the database / JSON store was lost while the raw files
+            survived. Messages already in your inbox are left untouched.
+        </p>
+        <p class="muted">
+            <strong class="accent">Heads up:</strong> routing is best-effort. The mailbox and receive time are
+            reconstructed from each message's headers, so recovered mail whose original alias can't be
+            determined lands in the <strong>catch-all</strong>. A large store can take a while; recovered
+            messages are re-parsed by the background worker and appear as they finish.
+        </p>
+        <div class="btn-row">
+            <button class="btn" @onclick="ReindexAsync" disabled="@_reindexing">
+                @(_reindexing ? "Re-indexing…" : "Yes, re-index")
+            </button>
+            <button class="btn btn-ghost" @onclick="() => _confirmReindex = false" disabled="@_reindexing">Cancel</button>
+        </div>
+    </div>
+}
 
 @if (_flash is not null)
 {
@@ -93,6 +124,8 @@ else
     private DateTimeOffset? _lastRun;
     private bool _running;
     private bool _reloading;
+    private bool _reindexing;
+    private bool _confirmReindex;
     private string? _flash;
 
     protected override void OnInitialized()
@@ -134,6 +167,33 @@ else
         finally
         {
             _reloading = false;
+        }
+    }
+
+    private async Task ReindexAsync()
+    {
+        _reindexing = true;
+        _flash = null;
+        try
+        {
+            var r = await Reindexer.ReindexAsync();
+            await Audit.WriteAsync(new AuditEntry
+            {
+                Action = "storage.reindex", TargetType = "storage", Actor = "ui",
+                Details = $"recovered={r.Recovered} skipped={r.Skipped} failed={r.Failed}",
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+            _confirmReindex = false;
+            _flash = $"Re-index complete: {r.Recovered} recovered, {r.Skipped} already present, {r.Failed} failed."
+                   + (r.Recovered > 0 ? " Recovered messages will finish parsing shortly." : "");
+        }
+        catch (Exception ex)
+        {
+            _flash = $"Re-index failed: {ex.Message}";
+        }
+        finally
+        {
+            _reindexing = false;
         }
     }
 

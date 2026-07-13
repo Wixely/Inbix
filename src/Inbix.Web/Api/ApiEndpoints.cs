@@ -278,6 +278,19 @@ public static class ApiEndpoints
             return Results.Ok(new { reloaded = true });
         });
 
+        // Recover mail from the raw store into the index (e.g. after the DB / JSON store was lost).
+        api.MapPost("/admin/reindex", async (IRawReindexer reindexer, IAuditRepository audit, CancellationToken ct) =>
+        {
+            var r = await reindexer.ReindexAsync(ct);
+            await audit.WriteAsync(new AuditEntry
+            {
+                Action = "storage.reindex", TargetType = "storage", Actor = "api",
+                Details = $"recovered={r.Recovered} skipped={r.Skipped} failed={r.Failed}",
+                CreatedAt = DateTimeOffset.UtcNow
+            }, ct);
+            return Results.Ok(new { r.Recovered, r.Skipped, r.Failed });
+        });
+
         return app;
     }
 }

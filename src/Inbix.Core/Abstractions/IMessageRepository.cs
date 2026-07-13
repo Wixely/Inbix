@@ -68,4 +68,7 @@ public interface IMessageRepository
 
     /// <summary>Hard-delete a message and its body/attachments rows plus the raw + attachment files.</summary>
     Task DeleteAsync(long messageId, CancellationToken ct = default);
+
+    /// <summary>Every non-null raw storage path currently referenced by a message (for re-index de-duplication).</summary>
+    Task<IReadOnlyList<string>> ListRawStoragePathsAsync(CancellationToken ct = default);
 }
