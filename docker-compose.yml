@@ -9,6 +9,8 @@ services:
     ports:
       - "25:25"      # inbound SMTP (must be reachable from the internet for real mail)
       - "8080:8080"  # web UI + API (keep this behind a VPN / reverse proxy in production)
+      # Read-only IMAP (opt-in below). Bind to a LAN/VPN address, never the public internet, e.g.:
+      # - "127.0.0.1:143:143"
     environment:
       # Domains this instance accepts mail for (double-underscore = nested config).
       Inbix__Domains__0: "mydomain.com"
@@ -35,6 +37,13 @@ services:
       Inbix__Backups__Enabled: "true"
       Inbix__Backups__IntervalHours: "24"
       Inbix__Backups__RetentionCount: "7"
+
+      # --- Read-only IMAP (browse stored mail from a mail client). Disabled by default. ---
+      # WARNING: internal/trusted networks only — do NOT expose to the internet. Credentials are sent in
+      # plaintext unless you set Inbix__Imap__CertificatePath. Uses its OWN login (not the admin one).
+      Inbix__Imap__Enabled: "false"
+      Inbix__Imap__Username: "admin"
+      Inbix__Imap__Password: "admin"     # change me; or set Inbix__Imap__PasswordHash
 
       # Admin login. Set a password (or PasswordHash) — without one the UI/API are OPEN.
       # Generate a hash: docker compose run --rm inbix dotnet Inbix.Web.dll hash-password "your-password"

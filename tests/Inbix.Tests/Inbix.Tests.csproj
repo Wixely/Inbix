@@ -10,10 +10,12 @@
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="Microsoft.Data.Sqlite" />
     <PackageReference Include="MimeKit" />
+    <PackageReference Include="MailKit" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Inbix.Core\Inbix.Core.csproj" />
     <ProjectReference Include="..\..\src\Inbix.Data\Inbix.Data.csproj" />
+    <ProjectReference Include="..\..\src\Inbix.Imap\Inbix.Imap.csproj" />
     <ProjectReference Include="..\..\src\Inbix.Smtp\Inbix.Smtp.csproj" />
     <ProjectReference Include="..\..\src\Inbix.Worker\Inbix.Worker.csproj" />
   </ItemGroup>

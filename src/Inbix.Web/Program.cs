@@ -1,5 +1,7 @@
 using Inbix.Core.Options;
+using Inbix.Core.Security;
 using Inbix.Data;
+using Inbix.Imap;
 using Inbix.Smtp;
 using Inbix.Web.Api;
 using Inbix.Web.Auth;
@@ -36,6 +38,7 @@ builder.Services.AddOptions<InbixOptions>()
 // Application layers.
 builder.Services.AddInbixData(builder.Configuration);   // SQLite / JSON store (provider-swappable)
 builder.Services.AddInbixSmtp();   // SmtpServer receiver
+builder.Services.AddInbixImap();   // read-only IMAP server (disabled unless Inbix:Imap:Enabled)
 builder.Services.AddInbixWorker(); // MIME parser background worker
 
 // --- Authentication / authorization ---

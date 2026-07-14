@@ -58,9 +58,10 @@ ENV Inbix__DataProtectionKeysPath="/data/keys"
 # Single persistence mount point.
 VOLUME ["/data"]
 
-# 8080 = web UI/API, 25 = inbound SMTP.
+# 8080 = web UI/API, 25 = inbound SMTP, 143 = read-only IMAP (opt-in; internal networks only).
 EXPOSE 8080
 EXPOSE 25
+EXPOSE 143
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD curl -fsS http://localhost:8080/health/ready || exit 1

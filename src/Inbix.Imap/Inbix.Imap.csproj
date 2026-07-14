@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>Inbix.Imap</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- No IMAP server library exists for .NET; the protocol is implemented directly on
+         TcpListener + SslStream. MimeKit builds ENVELOPE/BODYSTRUCTURE and resolves body sections. -->
+    <PackageReference Include="MimeKit" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Inbix.Core\Inbix.Core.csproj" />
+  </ItemGroup>
+</Project>

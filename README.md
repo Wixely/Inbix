@@ -116,6 +116,10 @@ using the `__` separator (e.g. `Inbix__Smtp__Port=2525`).
 | `Inbix:Smtp:MaxConcurrentSessions` | `50` | Concurrent-session cap (rejected at MAIL FROM); 0 disables |
 | `Inbix:Smtp:MaxConnectionsPerMinutePerIp` | `0` | Per-IP connection rate limit/min; 0 disables |
 | `Inbix:Smtp:CertificatePath` / `CertificatePassword` | _(empty)_ | PFX path to enable STARTTLS |
+| `Inbix:Imap:Enabled` | `false` | Read-only IMAP server (see [Read mail in a client](#read-mail-in-a-client-imap)). **Internal networks only.** |
+| `Inbix:Imap:Port` | `143` | IMAP listen port |
+| `Inbix:Imap:Username` / `Password` | `admin` / `admin` | IMAP login, **separate from the admin login** (or set `Inbix:Imap:PasswordHash`) |
+| `Inbix:Imap:CertificatePath` / `CertificatePassword` | _(empty)_ | PFX path to serve IMAP over TLS (else plaintext) |
 | `Inbix:Storage:RawPath` | `./data/raw` | Directory for raw MIME + attachments |
 | `Inbix:DataProtectionKeysPath` | _(empty)_ | Where to persist DataProtection keys (cookie signing); set to keep logins across restarts |
 | `Inbix:Worker:PollSeconds` / `BatchSize` | `5` / `20` | Parser poll interval / batch size |
@@ -250,6 +254,37 @@ password masked behind a reveal toggle). Deleting an identity unlinks its aliase
 the Identities page lists which aliases use each identity. Identities — including passwords — are stored
 in the database in clear text so they can be retrieved, so treat the database and backups as secrets
 (see [Security notes](#security-notes)).
+
+## Read mail in a client (IMAP)
+
+Inbix can expose a **read-only IMAP server** so a mail client (Thunderbird, Apple Mail, K-9, …) can browse
+stored mail. It's **disabled by default** and has its **own login, separate from the admin account**
+(default `admin` / `admin`).
+
+> ⚠️ **Internal networks only.** IMAP gives read access to *all* stored mail, and credentials are sent in
+> **plaintext** unless you set `Inbix:Imap:CertificatePath`. Do **not** expose it to the internet — bind it
+> to a LAN/VPN address and firewall it. The Status page flags a weak/default password and this exposure.
+
+Enable it:
+
+```bash
+Inbix__Imap__Enabled=true
+Inbix__Imap__Username=you
+Inbix__Imap__Password='a-strong-passphrase'      # or Inbix__Imap__PasswordHash=$(… hash-password …)
+# optional TLS: Inbix__Imap__CertificatePath=/path/to/cert.pfx
+```
+
+Then point a client at the host on port **143** (no encryption, or STARTTLS-less TLS if a cert is set),
+username/password as above. Folders you'll see:
+
+| Folder | Contents |
+|---|---|
+| `INBOX` | all non-junk mail across every alias |
+| `Aliases/<address>` | one folder per alias (catch-all is `Aliases/catch-all`) |
+| `Junk` | junked mail |
+
+It's **read-only** by design (Inbix is inbound-only): you can read, search and download messages, but not
+move, delete, flag or send. New mail appears live via IMAP `IDLE`.
 
 ## Storage providers
 

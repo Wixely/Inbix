@@ -48,6 +48,8 @@ license text for each is kept alongside the fonts:
 The following are used only to build and run the test suite (`Inbix.Tests`) and are
 **not** part of the distributed application:
 
+- MailKit — MIT License — © .NET Foundation and Contributors / Jeffrey Stedfast
+  (IMAP client used only to drive the read-only IMAP server end-to-end in tests)
 - xunit and related packages — Apache License 2.0
 - Microsoft.NET.Test.Sdk, Microsoft.CodeCoverage — Microsoft .NET Library license
   (build/test tooling only; not redistributed)

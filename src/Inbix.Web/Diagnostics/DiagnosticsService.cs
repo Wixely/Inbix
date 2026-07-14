@@ -68,6 +68,7 @@ public sealed class DiagnosticsService
         CheckBackups(results);
         await CheckAliasesAndDomainsAsync(results, ct);
         CheckSecurity(results);
+        CheckImap(results);
         CheckTls(results);
         await CheckSmtpListenerAsync(results, ct);
         await CheckRcptAsync(results, ct);
@@ -186,6 +187,45 @@ public sealed class DiagnosticsService
                 _env.IsDevelopment() ? DiagnosticStatus.Info : DiagnosticStatus.Warning,
                 "RequireHttps is disabled.",
                 "Enable it (or terminate TLS at a reverse proxy) before exposing the UI."));
+    }
+
+    private void CheckImap(List<DiagnosticResult> results)
+    {
+        const string cat = "Security";
+        var imap = _options.Imap;
+        if (!imap.Enabled)
+        {
+            results.Add(new(cat, "IMAP server", DiagnosticStatus.Info, "Disabled."));
+            return;
+        }
+
+        // Password strength (the default admin:admin should be nudged).
+        if (!string.IsNullOrEmpty(imap.PasswordHash))
+        {
+            results.Add(new(cat, "IMAP password", DiagnosticStatus.Ok, "Password is hashed."));
+        }
+        else if (string.IsNullOrEmpty(imap.Password))
+        {
+            results.Add(new(cat, "IMAP password", DiagnosticStatus.Error,
+                "No IMAP password set - mailbox access is OPEN.", "Set Inbix:Imap:Password or PasswordHash."));
+        }
+        else if (Inbix.Core.Security.PasswordStrength.Weakness(imap.Password) is { } why)
+        {
+            results.Add(new(cat, "IMAP password", DiagnosticStatus.Warning,
+                $"IMAP password is weak ({why}).", "Change the default admin:admin — set a strong Inbix:Imap:Password or a PasswordHash."));
+        }
+        else
+        {
+            results.Add(new(cat, "IMAP password", DiagnosticStatus.Ok, "Password configured."));
+        }
+
+        // Exposure warning — always when enabled.
+        var tls = !string.IsNullOrWhiteSpace(imap.CertificatePath);
+        results.Add(new(cat, "IMAP exposure", DiagnosticStatus.Warning,
+            "IMAP is enabled - it gives read-only access to ALL stored mail.",
+            tls
+                ? "For trusted internal networks only; do not expose it to the internet."
+                : "No TLS configured, so credentials are sent in PLAINTEXT. For trusted internal networks only; do not expose it to the internet. Set Inbix:Imap:CertificatePath to enable TLS."));
     }
 
     private void CheckTls(List<DiagnosticResult> results)

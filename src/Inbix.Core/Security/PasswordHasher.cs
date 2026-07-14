@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 
-namespace Inbix.Web.Auth;
+namespace Inbix.Core.Security;
 
 /// <summary>
 /// PBKDF2 (SHA-256) password hashing. Hash format: "pbkdf2-sha256$iterations$saltB64$keyB64".

@@ -207,6 +207,11 @@ and restarting Inbix.
 - Inbix can hold password-reset and account-recovery mail, plus any saved **Identities** (whose
   passwords are stored in clear text so they can be retrieved). Treat the database and backups as
   secrets: encrypt backups and restrict who can read `/data`.
+- **IMAP** (`Inbix__Imap__Enabled`, off by default) exposes read-only access to *all* stored mail with
+  its own login (default `admin:admin`). Only enable it on a trusted LAN/VPN — never the public internet.
+  Change the default password (or set `Inbix__Imap__PasswordHash`), bind port 143 to an internal address,
+  and set `Inbix__Imap__CertificatePath` for TLS since credentials are otherwise sent in plaintext. The
+  Status page warns about a weak/default password and the exposure.
 
 **Receiving reliably**
 - Run on a host with a clean IP. Some senders consult DNS blocklists (DNSBLs); a previously-abused

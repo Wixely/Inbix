@@ -17,6 +17,7 @@ public sealed class InbixOptions
 
     public DatabaseOptions Database { get; set; } = new();
     public SmtpOptions Smtp { get; set; } = new();
+    public ImapOptions Imap { get; set; } = new();
     public StorageOptions Storage { get; set; } = new();
     public AdminOptions Admin { get; set; } = new();
     public WorkerOptions Worker { get; set; } = new();
@@ -86,6 +87,42 @@ public sealed class SmtpOptions
     /// <summary>Optional path to a PFX certificate to enable STARTTLS. Empty disables TLS.</summary>
     public string CertificatePath { get; set; } = string.Empty;
     public string CertificatePassword { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Read-only IMAP server so an internal mail client can browse stored mail. Its credentials are
+/// SEPARATE from the admin login. <b>Disabled by default.</b> Designed for trusted internal networks
+/// only — do not expose it to the internet (credentials are sent in plaintext unless TLS is configured).
+/// </summary>
+public sealed class ImapOptions
+{
+    /// <summary>Enable the read-only IMAP server. Disabled by default.</summary>
+    public bool Enabled { get; set; }
+
+    /// <summary>Port to listen on. 143 is the IMAP default (993 if you terminate TLS here).</summary>
+    public int Port { get; set; } = 143;
+
+    /// <summary>IMAP login username. Independent of the admin login. Defaults to "admin".</summary>
+    public string Username { get; set; } = "admin";
+
+    /// <summary>
+    /// Plaintext IMAP password (default "admin"). Convenient for internal use, but prefer
+    /// <see cref="PasswordHash"/>. Ignored when <see cref="PasswordHash"/> is set.
+    /// </summary>
+    public string Password { get; set; } = "admin";
+
+    /// <summary>
+    /// PBKDF2 password hash (format "pbkdf2-sha256$iterations$salt$key"). Generate with
+    /// <c>dotnet run --project src/Inbix.Web -- hash-password &lt;password&gt;</c>. Takes precedence over <see cref="Password"/>.
+    /// </summary>
+    public string PasswordHash { get; set; } = string.Empty;
+
+    /// <summary>Optional PFX certificate to serve IMAP over TLS (implicit TLS on connect). Empty = plaintext.</summary>
+    public string CertificatePath { get; set; } = string.Empty;
+    public string CertificatePassword { get; set; } = string.Empty;
+
+    /// <summary>Maximum concurrent IMAP client connections.</summary>
+    public int MaxConcurrentSessions { get; set; } = 20;
 }
 
 public sealed class StorageOptions

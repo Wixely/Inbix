@@ -7,6 +7,8 @@
     <PackageVersion Include="SmtpServer" Version="11.1.0" />
     <!-- MIME parsing -->
     <PackageVersion Include="MimeKit" Version="4.17.0" />
+    <!-- IMAP client — used only by the test project to drive the IMAP server end-to-end -->
+    <PackageVersion Include="MailKit" Version="4.17.0" />
     <!-- Data access -->
     <PackageVersion Include="Dapper" Version="2.1.79" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.9" />

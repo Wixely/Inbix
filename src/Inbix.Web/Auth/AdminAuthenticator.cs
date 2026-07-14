@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Inbix.Core.Options;
+using Inbix.Core.Security;
 using Microsoft.Extensions.Options;
 
 namespace Inbix.Web.Auth;
