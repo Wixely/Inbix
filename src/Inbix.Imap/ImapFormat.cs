@@ -69,7 +69,9 @@ internal static class ImapFormat
         var (octets, lines) = Measure(entity);
         var paramList = Params(ct);
         var id = NString(entity.ContentId);
-        var enc = Encoding(entity is MimePart p ? p.ContentTransferEncoding : ContentEncoding.SevenBit);
+        // body-fld-enc is a STRING (RFC 3501) — must be quoted, or strict clients skip decoding
+        // (e.g. quoted-printable text then shows literal "=" artifacts).
+        var enc = NString(Encoding(entity is MimePart p ? p.ContentTransferEncoding : ContentEncoding.SevenBit));
 
         if (type.Equals("text", StringComparison.OrdinalIgnoreCase))
             return $"({NString(type)} {NString(ct.MediaSubtype)} {paramList} {id} NIL {enc} {octets} {lines})";

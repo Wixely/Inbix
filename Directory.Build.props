@@ -8,6 +8,6 @@
     <InvariantGlobalization>true</InvariantGlobalization>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <!-- Product version shown in the UI footer; CI may override with -p:Version=<tag> on release. -->
-    <Version>1.11.0</Version>
+    <Version>1.11.1</Version>
   </PropertyGroup>
 </Project>
