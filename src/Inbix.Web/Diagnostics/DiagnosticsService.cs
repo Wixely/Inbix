@@ -226,6 +226,11 @@ public sealed class DiagnosticsService
             tls
                 ? "For trusted internal networks only; do not expose it to the internet."
                 : "No TLS configured, so credentials are sent in PLAINTEXT. For trusted internal networks only; do not expose it to the internet. Set Inbix:Imap:CertificatePath to enable TLS."));
+
+        if (imap.AllowDelete)
+            results.Add(new(cat, "IMAP deletes", DiagnosticStatus.Warning,
+                "IMAP clients can permanently delete stored mail (Inbix:Imap:AllowDelete is on).",
+                "Deleting in a mail client removes the message, raw MIME and attachments from Inbix. Turn it off to keep the mailbox read-only."));
     }
 
     private void CheckTls(List<DiagnosticResult> results)

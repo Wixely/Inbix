@@ -25,6 +25,7 @@ public sealed class ImapSession
     private bool _authenticated;
     private string? _selectedName;
     private List<Message> _selected = [];
+    private readonly HashSet<long> _deleted = []; // message ids flagged \Deleted this session (AllowDelete)
 
     private readonly byte[] _rbuf = new byte[16384];
     private int _rlen, _rpos;
@@ -106,7 +107,7 @@ public sealed class ImapSession
                 await ListAsync(tag, cmd, tokens, ct).ConfigureAwait(false); break;
             case "SELECT":
             case "EXAMINE":
-                await SelectAsync(tag, tokens, ct).ConfigureAwait(false); break;
+                await SelectAsync(tag, tokens, examine: cmd == "EXAMINE", ct).ConfigureAwait(false); break;
             case "STATUS":
                 await StatusAsync(tag, tokens, ct).ConfigureAwait(false); break;
             case "FETCH":
@@ -117,10 +118,14 @@ public sealed class ImapSession
                 await StoreAsync(tag, tokens, byUid: false, ct).ConfigureAwait(false); break;
             case "UID":
                 await UidAsync(tag, tokens, ct).ConfigureAwait(false); break;
+            case "EXPUNGE":
+                await ExpungeAsync(tag, restrictUids: null, byUid: false, ct).ConfigureAwait(false); break;
             case "IDLE":
                 await IdleAsync(tag, ct).ConfigureAwait(false); break;
             case "CLOSE":
-                _selectedName = null; _selected = [];
+                if (_options.AllowDelete && _selectedName is not null)
+                    await DoExpungeAsync(silent: true, restrictUids: null, ct).ConfigureAwait(false); // CLOSE expunges silently
+                _selectedName = null; _selected = []; _deleted.Clear();
                 await SendAsync($"{tag} OK CLOSE completed\r\n", ct).ConfigureAwait(false); break;
             case "SUBSCRIBE":
             case "UNSUBSCRIBE":
@@ -129,7 +134,6 @@ public sealed class ImapSession
             case "DELETE":
             case "RENAME":
             case "APPEND":
-            case "EXPUNGE":
                 await SendAsync($"{tag} NO [CANNOT] Inbix mailboxes are read-only\r\n", ct).ConfigureAwait(false); break;
             default:
                 await SendAsync($"{tag} BAD Unknown command\r\n", ct).ConfigureAwait(false); break;
@@ -229,7 +233,7 @@ public sealed class ImapSession
         return new System.Text.RegularExpressions.Regex("^" + escaped + "$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
     }
 
-    private async Task SelectAsync(string tag, List<string> tokens, CancellationToken ct)
+    private async Task SelectAsync(string tag, List<string> tokens, bool examine, CancellationToken ct)
     {
         if (tokens.Count < 2) { await SendAsync($"{tag} BAD missing mailbox\r\n", ct).ConfigureAwait(false); return; }
         var name = tokens[1];
@@ -238,15 +242,21 @@ public sealed class ImapSession
 
         _selectedName = name;
         _selected = msgs.ToList();
+        _deleted.Clear();
+
+        // SELECT is read-write only when deletes are allowed; EXAMINE is always read-only.
+        var writable = _options.AllowDelete && !examine;
         var uidNext = (_selected.Count > 0 ? _selected[^1].Id : 0) + 1;
         var sb = new StringBuilder();
-        sb.Append("* FLAGS (\\Seen)\r\n");
+        sb.Append(writable ? "* FLAGS (\\Seen \\Deleted)\r\n" : "* FLAGS (\\Seen)\r\n");
         sb.Append($"* {_selected.Count} EXISTS\r\n");
         sb.Append("* 0 RECENT\r\n");
         sb.Append("* OK [UIDVALIDITY 1] UIDs valid\r\n");
         sb.Append($"* OK [UIDNEXT {uidNext}] Predicted next UID\r\n");
-        sb.Append("* OK [PERMANENTFLAGS ()] No permanent flags (read-only)\r\n");
-        sb.Append($"{tag} OK [READ-ONLY] SELECT completed\r\n");
+        sb.Append(writable
+            ? "* OK [PERMANENTFLAGS (\\Deleted)] Deletes are permanent\r\n"
+            : "* OK [PERMANENTFLAGS ()] No permanent flags (read-only)\r\n");
+        sb.Append($"{tag} OK [{(writable ? "READ-WRITE" : "READ-ONLY")}] SELECT completed\r\n");
         await SendAsync(sb.ToString(), ct).ConfigureAwait(false);
     }
 
@@ -273,6 +283,7 @@ public sealed class ImapSession
             "FETCH" => FetchAsync(tag, inner, byUid: true, ct),
             "SEARCH" => SearchAsync(tag, inner, byUid: true, ct),
             "STORE" => StoreAsync(tag, inner, byUid: true, ct),
+            "EXPUNGE" => ExpungeAsync(tag, restrictUids: UidSet(inner.Count > 1 ? inner[1] : ""), byUid: true, ct),
             _ => SendAsync($"{tag} BAD Unsupported UID command\r\n", ct),
         };
     }
@@ -375,10 +386,79 @@ public sealed class ImapSession
 
     private async Task StoreAsync(string tag, List<string> tokens, bool byUid, CancellationToken ct)
     {
-        // Read-only: accept but persist nothing. Echo \Seen back so clients don't error.
-        foreach (var (seq, msg) in Resolve(tokens.Count > 1 ? tokens[1] : "", byUid))
-            await SendAsync($"* {seq} FETCH (FLAGS (\\Seen))\r\n", ct).ConfigureAwait(false);
+        var targets = Resolve(tokens.Count > 1 ? tokens[1] : "", byUid);
+
+        if (!_options.AllowDelete)
+        {
+            // Read-only: accept but persist nothing. Echo \Seen back so clients don't error.
+            foreach (var (seq, _) in targets)
+                await SendAsync($"* {seq} FETCH (FLAGS (\\Seen))\r\n", ct).ConfigureAwait(false);
+            await SendAsync($"{tag} OK {(byUid ? "UID " : "")}STORE completed\r\n", ct).ConfigureAwait(false);
+            return;
+        }
+
+        // Honour \Deleted so EXPUNGE can remove mail; other flags aren't persisted.
+        var item = tokens.Count > 2 ? tokens[2].ToUpperInvariant() : "";
+        var silent = item.Contains(".SILENT", StringComparison.Ordinal);
+        var flags = tokens.Count > 3 ? tokens[3] : "";
+        var hasDeleted = flags.Contains("\\Deleted", StringComparison.OrdinalIgnoreCase);
+        var op = item.StartsWith("+FLAGS", StringComparison.Ordinal) ? '+'
+               : item.StartsWith("-FLAGS", StringComparison.Ordinal) ? '-' : '=';
+
+        foreach (var (seq, msg) in targets)
+        {
+            if (op == '-') { if (hasDeleted) _deleted.Remove(msg.Id); }
+            else if (op == '+') { if (hasDeleted) _deleted.Add(msg.Id); }
+            else { if (hasDeleted) _deleted.Add(msg.Id); else _deleted.Remove(msg.Id); } // FLAGS (replace)
+
+            if (!silent)
+                await SendAsync($"* {seq} FETCH (FLAGS ({FlagsFor(msg)}))\r\n", ct).ConfigureAwait(false);
+        }
         await SendAsync($"{tag} OK {(byUid ? "UID " : "")}STORE completed\r\n", ct).ConfigureAwait(false);
+    }
+
+    private string FlagsFor(Message m) => _deleted.Contains(m.Id) ? "\\Seen \\Deleted" : "\\Seen";
+
+    private HashSet<long>? UidSet(string set)
+    {
+        if (string.IsNullOrWhiteSpace(set)) return null;
+        return Resolve(set, byUid: true).Select(t => t.m.Id).ToHashSet();
+    }
+
+    private async Task ExpungeAsync(string tag, HashSet<long>? restrictUids, bool byUid, CancellationToken ct)
+    {
+        if (_selectedName is null) { await SendAsync($"{tag} NO No mailbox selected\r\n", ct).ConfigureAwait(false); return; }
+        if (!_options.AllowDelete)
+        {
+            await SendAsync($"{tag} NO [CANNOT] Inbix mailboxes are read-only (set Inbix:Imap:AllowDelete to enable)\r\n", ct).ConfigureAwait(false);
+            return;
+        }
+        await DoExpungeAsync(silent: false, restrictUids, ct).ConfigureAwait(false);
+        await SendAsync($"{tag} OK {(byUid ? "UID " : "")}EXPUNGE completed\r\n", ct).ConfigureAwait(false);
+    }
+
+    // Permanently remove every \Deleted message (optionally limited to restrictUids). EXPUNGE responses go
+    // out highest-seq first so the sequence numbers stay valid as messages are removed.
+    private async Task DoExpungeAsync(bool silent, HashSet<long>? restrictUids, CancellationToken ct)
+    {
+        var seqs = new List<int>();
+        for (var i = 0; i < _selected.Count; i++)
+        {
+            var id = _selected[i].Id;
+            if (_deleted.Contains(id) && (restrictUids is null || restrictUids.Contains(id)))
+                seqs.Add(i + 1);
+        }
+        seqs.Sort();
+        seqs.Reverse();
+
+        foreach (var seq in seqs)
+        {
+            var m = _selected[seq - 1];
+            await _mailboxes.DeleteAsync(m.Id, ct).ConfigureAwait(false);
+            _deleted.Remove(m.Id);
+            _selected.RemoveAt(seq - 1);
+            if (!silent) await SendAsync($"* {seq} EXPUNGE\r\n", ct).ConfigureAwait(false);
+        }
     }
 
     // ---- IDLE ----

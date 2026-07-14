@@ -80,5 +80,8 @@ public sealed class ImapMailboxProvider
         return null;
     }
 
+    /// <summary>Permanently delete a message (row + raw MIME + attachments). Used when AllowDelete is on.</summary>
+    public Task DeleteAsync(long messageId, CancellationToken ct) => _messages.DeleteAsync(messageId, ct);
+
     private static List<Message> Sorted(IEnumerable<Message> m) => m.OrderBy(x => x.Id).ToList();
 }

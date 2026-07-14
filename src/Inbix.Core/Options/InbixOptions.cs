@@ -123,6 +123,14 @@ public sealed class ImapOptions
 
     /// <summary>Maximum concurrent IMAP client connections.</summary>
     public int MaxConcurrentSessions { get; set; } = 20;
+
+    /// <summary>
+    /// When true, deleting a message in an IMAP client (<c>\Deleted</c> + EXPUNGE, or moving to Trash)
+    /// <b>permanently removes it from Inbix</b> — the row, raw MIME and attachments. Off by default: the
+    /// mailbox is read-only, so client deletes don't affect the server. Enabling this allows real data loss
+    /// from a mail client.
+    /// </summary>
+    public bool AllowDelete { get; set; }
 }
 
 public sealed class StorageOptions

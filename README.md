@@ -120,6 +120,7 @@ using the `__` separator (e.g. `Inbix__Smtp__Port=2525`).
 | `Inbix:Imap:Port` | `143` | IMAP listen port |
 | `Inbix:Imap:Username` / `Password` | `admin` / `admin` | IMAP login, **separate from the admin login** (or set `Inbix:Imap:PasswordHash`) |
 | `Inbix:Imap:CertificatePath` / `CertificatePassword` | _(empty)_ | PFX path to serve IMAP over TLS (else plaintext) |
+| `Inbix:Imap:AllowDelete` | `false` | When on, deleting in a mail client **permanently deletes** the message from Inbix. Off = read-only. |
 | `Inbix:Storage:RawPath` | `./data/raw` | Directory for raw MIME + attachments |
 | `Inbix:DataProtectionKeysPath` | _(empty)_ | Where to persist DataProtection keys (cookie signing); set to keep logins across restarts |
 | `Inbix:Worker:PollSeconds` / `BatchSize` | `5` / `20` | Parser poll interval / batch size |
@@ -284,7 +285,10 @@ username/password as above. Folders you'll see:
 | `Junk` | junked mail |
 
 It's **read-only** by design (Inbix is inbound-only): you can read, search and download messages, but not
-move, delete, flag or send. New mail appears live via IMAP `IDLE`.
+move, flag or send, and **deleting in the client does nothing on the server**. New mail appears live via
+IMAP `IDLE`. If you'd rather manage mail from the client, set **`Inbix:Imap:AllowDelete=true`** — then
+deleting a message (or moving it to Trash) **permanently removes** it from Inbix (row + raw MIME +
+attachments). It's off by default because it enables real data loss from a mail client.
 
 ## Storage providers
 

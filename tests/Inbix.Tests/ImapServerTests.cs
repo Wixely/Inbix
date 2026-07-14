@@ -84,6 +84,17 @@ public sealed class ImapServerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Default_Is_Read_Only()
+    {
+        using var client = new ImapClient();
+        await client.ConnectAsync("127.0.0.1", _port, SecureSocketOptions.None);
+        await client.AuthenticateAsync("admin", "admin");
+        await client.Inbox.OpenAsync(FolderAccess.ReadWrite);      // ask for write…
+        Assert.Equal(FolderAccess.ReadOnly, client.Inbox.Access);  // …server keeps it read-only (AllowDelete off)
+        await client.DisconnectAsync(quit: true);
+    }
+
+    [Fact]
     public async Task Bad_Credentials_Are_Rejected()
     {
         using var client = new ImapClient();

@@ -44,6 +44,9 @@ services:
       Inbix__Imap__Enabled: "false"
       Inbix__Imap__Username: "admin"
       Inbix__Imap__Password: "admin"     # change me; or set Inbix__Imap__PasswordHash
+      # Off = read-only (client deletes do nothing). Set true to let a mail client PERMANENTLY delete
+      # stored mail (row + raw + attachments) from Inbix. Real data loss — leave off unless you want it.
+      Inbix__Imap__AllowDelete: "false"
 
       # Admin login. Set a password (or PasswordHash) — without one the UI/API are OPEN.
       # Generate a hash: docker compose run --rm inbix dotnet Inbix.Web.dll hash-password "your-password"
