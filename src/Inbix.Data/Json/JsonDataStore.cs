@@ -169,11 +169,12 @@ public sealed class JsonDataStore : IReloadableStore
             if (m is null) continue;
             m.CurrentPath = file;
 
-            // De-duplicate by id (a crash mid-move can leave two copies): keep the newest, delete the older.
+            // De-duplicate by id (a crash mid-move can leave two copies). Prefer the copy whose *content*
+            // is more advanced — parsing/junk state — rather than filesystem mtime, which is coarse and can
+            // even run backwards across servers on NFS.
             if (messages.TryGetValue(m.Id, out var existing))
             {
-                var keepNew = File.GetLastWriteTimeUtc(file) >= File.GetLastWriteTimeUtc(existing.CurrentPath!);
-                if (keepNew) { _io.TryDelete(existing.CurrentPath!); messages[m.Id] = m; }
+                if (PreferCandidate(m, file, existing)) { _io.TryDelete(existing.CurrentPath!); messages[m.Id] = m; }
                 else { _io.TryDelete(file); }
             }
             else
@@ -181,6 +182,15 @@ public sealed class JsonDataStore : IReloadableStore
                 messages[m.Id] = m;
             }
         }
+    }
+
+    private static bool PreferCandidate(StoredMessage candidate, string candidateFile, StoredMessage existing)
+    {
+        if (candidate.Parsed != existing.Parsed) return candidate.Parsed;             // parsing only adds data
+        var c = candidate.StateChangedAt ?? DateTimeOffset.MinValue;
+        var e = existing.StateChangedAt ?? DateTimeOffset.MinValue;
+        if (c != e) return c > e;                                                     // latest junk/unjunk/sweep wins
+        return File.GetLastWriteTimeUtc(candidateFile) >= File.GetLastWriteTimeUtc(existing.CurrentPath!);
     }
 
     private async Task<List<AuditEntry>> LoadAuditAsync(CancellationToken ct)
@@ -303,7 +313,10 @@ public sealed class JsonDataStore : IReloadableStore
         var withDomain = SafeFolder($"{localPart}@{domain}");
         if (!taken.Contains(withDomain)) return withDomain;
 
-        return $"{baseName}-{Guid.NewGuid():N}"[..Math.Min(baseName.Length + 9, 40)];
+        string candidate;
+        do { candidate = $"{baseName}-{Guid.NewGuid():N}"[..Math.Min(baseName.Length + 9, 40)]; }
+        while (taken.Contains(candidate));
+        return candidate;
     }
 
     private static readonly HashSet<string> WindowsReserved = new(StringComparer.OrdinalIgnoreCase)

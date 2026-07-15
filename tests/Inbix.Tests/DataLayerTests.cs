@@ -101,6 +101,21 @@ public sealed class DataLayerTests : IAsyncLifetime, IDisposable
         Assert.False(await fresh.IsDeliverableAsync("github@mydomain.com"));
     }
 
+    [Fact]
+    public async Task Creating_Alias_Invalidates_Resolver_Negative_Cache()
+    {
+        var resolver = _sp.GetRequiredService<IAliasResolver>();
+        var aliasService = _sp.GetRequiredService<IAliasService>();
+
+        // Prime the negative cache: not deliverable yet, and the "no" is cached for the TTL.
+        Assert.False(await resolver.IsDeliverableAsync("fresh@mydomain.com"));
+
+        await aliasService.CreateAsync("fresh", "mydomain.com", null);
+
+        // Without cache invalidation this would stay false for up to 30s; the new alias must accept mail now.
+        Assert.True(await resolver.IsDeliverableAsync("fresh@mydomain.com"));
+    }
+
     public Task DisposeAsync() => Task.CompletedTask;
 
     public void Dispose()

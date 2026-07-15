@@ -35,6 +35,7 @@ public sealed class SqliteConnectionFactory : IDbConnectionFactory, IAsyncDispos
 
     // Exclusive mode only: serialise all access through one shared connection.
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private static readonly TimeSpan GateTimeout = TimeSpan.FromSeconds(60);
     private SqliteConnection? _shared;
 
     public SqliteConnectionFactory(IOptions<InbixOptions> options)
@@ -83,7 +84,12 @@ public sealed class SqliteConnectionFactory : IDbConnectionFactory, IAsyncDispos
 
         // Exclusive mode: acquire the gate, ensure the shared connection is healthy, and hand out a
         // non-owning lease. The caller's dispose releases the gate (see LeasedSqliteConnection).
-        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        // A bounded wait turns a re-entrant OpenConnectionAsync (nested lease → self-deadlock) or a stuck
+        // operation into a clear exception instead of hanging the whole app forever.
+        if (!await _gate.WaitAsync(GateTimeout, ct).ConfigureAwait(false))
+            throw new TimeoutException(
+                "Timed out waiting for the SQLite exclusive-connection gate. This usually means a re-entrant " +
+                "OpenConnectionAsync (a repository method that opens a second connection while holding one) or a stuck operation.");
         try
         {
             if (_shared is null || _shared.State != ConnectionState.Open)
