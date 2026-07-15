@@ -19,7 +19,10 @@ public sealed class CachingAliasResolver : IAliasResolver
     private readonly IAliasRepository _aliases;
     private readonly HashSet<string> _domains;
     private readonly ConcurrentDictionary<string, (bool deliverable, DateTimeOffset expires)> _cache = new();
-    private (bool enabled, DateTimeOffset expires) _catchAll;
+    // A reference field published with volatile semantics — a tuple field would be a torn read across the
+    // concurrent RCPT threads (it's wider than a machine word).
+    private sealed record CatchAllState(bool Enabled, DateTimeOffset Expires);
+    private volatile CatchAllState? _catchAll;
 
     public CachingAliasResolver(IAliasRepository aliases, IOptions<InbixOptions> options)
     {
@@ -62,12 +65,19 @@ public sealed class CachingAliasResolver : IAliasResolver
 
     private async Task<bool> CatchAllEnabledAsync(DateTimeOffset now, CancellationToken ct)
     {
-        if (_catchAll.expires > now)
-            return _catchAll.enabled;
+        var cached = _catchAll;
+        if (cached is not null && cached.Expires > now)
+            return cached.Enabled;
 
         var catchAll = await _aliases.GetCatchAllAsync(ct).ConfigureAwait(false);
         var enabled = catchAll is { Enabled: true };
-        _catchAll = (enabled, now.Add(Ttl));
+        _catchAll = new CatchAllState(enabled, now.Add(Ttl));
         return enabled;
+    }
+
+    public void Invalidate()
+    {
+        _cache.Clear();
+        _catchAll = null;
     }
 }

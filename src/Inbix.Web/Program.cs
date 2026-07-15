@@ -69,7 +69,10 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.SlidingExpiration = true;
         options.Cookie.Name = "inbix.auth";
         options.Cookie.HttpOnly = true;
-        options.Cookie.SameSite = SameSiteMode.Lax;
+        // Strict (not Lax) so the session cookie is never sent on ANY cross-site request — closes CSRF on
+        // the route-only admin POSTs (backup/reload/reindex, junk/unjunk) incl. the Lax+POST window. Trade-off:
+        // following an external link into the UI shows the login page until you navigate within the app.
+        options.Cookie.SameSite = SameSiteMode.Strict;
         options.Cookie.SecurePolicy = requireHttps ? CookieSecurePolicy.Always : CookieSecurePolicy.SameAsRequest;
     });
 

@@ -42,8 +42,15 @@ public sealed class ImapServerHostedService : BackgroundService
         }
 
         X509Certificate2? certificate = null;
-        if (!string.IsNullOrWhiteSpace(_options.CertificatePath) && File.Exists(_options.CertificatePath))
+        if (!string.IsNullOrWhiteSpace(_options.CertificatePath))
+        {
+            // Fail fast rather than silently serving PLAINTEXT (leaking credentials) when a cert was
+            // configured but is missing/unloadable.
+            if (!File.Exists(_options.CertificatePath))
+                throw new FileNotFoundException(
+                    $"Inbix:Imap:CertificatePath '{_options.CertificatePath}' was not found. Fix the path, or clear it to serve plaintext intentionally.");
             certificate = X509CertificateLoader.LoadPkcs12FromFile(_options.CertificatePath, _options.CertificatePassword);
+        }
 
         var listener = new TcpListener(IPAddress.Any, _options.Port);
         listener.Start();

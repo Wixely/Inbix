@@ -84,6 +84,34 @@ public sealed class ImapDeleteTests : IAsyncLifetime
         Assert.Single(await messages.ListByAliasAsync(_aliasId, 50, 0));
     }
 
+    [Fact]
+    public async Task Examine_Is_Read_Only_Even_With_AllowDelete()
+    {
+        var messages = _host.Services.GetRequiredService<IMessageRepository>();
+        Assert.Equal(2, (await messages.ListByAliasAsync(_aliasId, 50, 0)).Count);
+
+        // A non-compliant client marks \Deleted on an EXAMINE (read-only) mailbox and CLOSEs.
+        using var tcp = new TcpClient();
+        await tcp.ConnectAsync(IPAddress.Loopback, _port);
+        using var r = new StreamReader(tcp.GetStream());
+        await using var w = new StreamWriter(tcp.GetStream()) { NewLine = "\r\n", AutoFlush = true };
+        await r.ReadLineAsync();
+        await Cmd(w, r, "a1 LOGIN admin admin", "a1");
+        await Cmd(w, r, "a2 EXAMINE INBOX", "a2");                 // read-only open
+        await Cmd(w, r, "a3 STORE 1 +FLAGS (\\Deleted)", "a3");
+        await Cmd(w, r, "a4 CLOSE", "a4");                          // must NOT expunge from a read-only mailbox
+
+        Assert.Equal(2, (await messages.ListByAliasAsync(_aliasId, 50, 0)).Count); // nothing deleted
+    }
+
+    private static async Task Cmd(StreamWriter w, StreamReader r, string command, string tag)
+    {
+        await w.WriteLineAsync(command);
+        string? line;
+        while ((line = await r.ReadLineAsync()) is not null)
+            if (line.StartsWith(tag + " ", StringComparison.Ordinal)) break;
+    }
+
     private static int FreePort()
     {
         var l = new TcpListener(IPAddress.Loopback, 0);

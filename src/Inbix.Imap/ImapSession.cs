@@ -22,8 +22,18 @@ public sealed class ImapSession
     private readonly IInboxNotifier _notifier;
     private readonly ILogger _logger;
 
+    // Read timeouts stop idle/slowloris connections from holding a session slot forever.
+    private static readonly TimeSpan PreAuthTimeout = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan IdleTimeout = TimeSpan.FromMinutes(30);
+    private const int MaxFailedLogins = 5;
+    private const int PreAuthLiteralCap = 8 * 1024;          // literals before auth are tiny (LOGIN)
+    private const int PostAuthLiteralCap = 64 * 1024 * 1024;
+
     private bool _authenticated;
+    private int _failedLogins;
+    private bool _closing;               // set after too many failed logins → drop the connection
     private string? _selectedName;
+    private bool _writable;              // current selection allows \Deleted/EXPUNGE (SELECT + AllowDelete, not EXAMINE)
     private List<Message> _selected = [];
     private readonly HashSet<long> _deleted = []; // message ids flagged \Deleted this session (AllowDelete)
 
@@ -47,7 +57,20 @@ public sealed class ImapSession
 
         while (!ct.IsCancellationRequested)
         {
-            var line = await ReadCommandAsync(ct).ConfigureAwait(false);
+            string? line;
+            using (var readCts = CancellationTokenSource.CreateLinkedTokenSource(ct))
+            {
+                readCts.CancelAfter(_authenticated ? IdleTimeout : PreAuthTimeout);
+                try
+                {
+                    line = await ReadCommandAsync(readCts.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                {
+                    await SendAsync("* BYE idle timeout\r\n", ct).ConfigureAwait(false); // slowloris / idle protection
+                    break;
+                }
+            }
             if (line is null) break;
 
             var sp = line.IndexOf(' ');
@@ -57,14 +80,21 @@ public sealed class ImapSession
 
             try
             {
-                if (await DispatchAsync(tag, rest, ct).ConfigureAwait(false)) break; // LOGOUT
+                if (await DispatchAsync(tag, rest, ct).ConfigureAwait(false)) break; // LOGOUT / forced close
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                _logger.LogWarning(ex, "IMAP command failed: {Command}", rest);
+                // Log only the command verb, never the arguments (they can contain a LOGIN password).
+                _logger.LogWarning(ex, "IMAP command failed: {Command}", Verb(rest));
                 await SendAsync($"{tag} BAD internal error\r\n", ct).ConfigureAwait(false);
             }
         }
+    }
+
+    private static string Verb(string rest)
+    {
+        var sp = rest.IndexOf(' ');
+        return sp < 0 ? rest : rest[..sp];
     }
 
     private static string Capabilities() => "IMAP4rev1 IDLE AUTH=PLAIN";
@@ -88,10 +118,10 @@ public sealed class ImapSession
                 return true;
             case "LOGIN":
                 await LoginAsync(tag, tokens, ct).ConfigureAwait(false);
-                return false;
+                return _closing;
             case "AUTHENTICATE":
                 await AuthenticateAsync(tag, tokens, ct).ConfigureAwait(false);
-                return false;
+                return _closing;
         }
 
         if (!_authenticated)
@@ -121,11 +151,14 @@ public sealed class ImapSession
             case "EXPUNGE":
                 await ExpungeAsync(tag, restrictUids: null, byUid: false, ct).ConfigureAwait(false); break;
             case "IDLE":
-                await IdleAsync(tag, ct).ConfigureAwait(false); break;
+                if (await IdleAsync(tag, ct).ConfigureAwait(false)) return true; // idle timeout → drop
+                break;
             case "CLOSE":
-                if (_options.AllowDelete && _selectedName is not null)
-                    await DoExpungeAsync(silent: true, restrictUids: null, ct).ConfigureAwait(false); // CLOSE expunges silently
-                _selectedName = null; _selected = []; _deleted.Clear();
+                // Only expunge on CLOSE when the mailbox was opened read-write (SELECT + AllowDelete).
+                // A read-only (EXAMINE) mailbox must never delete on close.
+                if (_writable && _selectedName is not null)
+                    await DoExpungeAsync(silent: true, restrictUids: null, ct).ConfigureAwait(false);
+                _selectedName = null; _selected = []; _deleted.Clear(); _writable = false;
                 await SendAsync($"{tag} OK CLOSE completed\r\n", ct).ConfigureAwait(false); break;
             case "SUBSCRIBE":
             case "UNSUBSCRIBE":
@@ -177,12 +210,17 @@ public sealed class ImapSession
         if (Verify(user, pass))
         {
             _authenticated = true;
+            _failedLogins = 0;
             await SendAsync($"{tag} OK LOGIN completed\r\n", ct).ConfigureAwait(false);
+            return;
         }
-        else
+
+        await Task.Delay(300, ct).ConfigureAwait(false); // throttle
+        await SendAsync($"{tag} NO [AUTHENTICATIONFAILED] Invalid credentials\r\n", ct).ConfigureAwait(false);
+        if (++_failedLogins >= MaxFailedLogins)
         {
-            await Task.Delay(300, ct).ConfigureAwait(false); // token throttle
-            await SendAsync($"{tag} NO [AUTHENTICATIONFAILED] Invalid credentials\r\n", ct).ConfigureAwait(false);
+            await SendAsync("* BYE too many failed login attempts\r\n", ct).ConfigureAwait(false);
+            _closing = true; // drop the connection to blunt brute-forcing
         }
     }
 
@@ -230,7 +268,8 @@ public sealed class ImapSession
     {
         // IMAP wildcards: * matches anything (incl. hierarchy), % matches within one level.
         var escaped = System.Text.RegularExpressions.Regex.Escape(pattern).Replace("\\*", ".*").Replace("%", "[^/]*");
-        return new System.Text.RegularExpressions.Regex("^" + escaped + "$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        return new System.Text.RegularExpressions.Regex("^" + escaped + "$",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromMilliseconds(100)); // guard against ReDoS
     }
 
     private async Task SelectAsync(string tag, List<string> tokens, bool examine, CancellationToken ct)
@@ -246,6 +285,7 @@ public sealed class ImapSession
 
         // SELECT is read-write only when deletes are allowed; EXAMINE is always read-only.
         var writable = _options.AllowDelete && !examine;
+        _writable = writable;
         var uidNext = (_selected.Count > 0 ? _selected[^1].Id : 0) + 1;
         var sb = new StringBuilder();
         sb.Append(writable ? "* FLAGS (\\Seen \\Deleted)\r\n" : "* FLAGS (\\Seen)\r\n");
@@ -386,11 +426,13 @@ public sealed class ImapSession
 
     private async Task StoreAsync(string tag, List<string> tokens, bool byUid, CancellationToken ct)
     {
+        if (_selectedName is null) { await SendAsync($"{tag} NO No mailbox selected\r\n", ct).ConfigureAwait(false); return; }
         var targets = Resolve(tokens.Count > 1 ? tokens[1] : "", byUid);
 
-        if (!_options.AllowDelete)
+        // \Deleted is only honoured on a read-write selection (SELECT + AllowDelete, not EXAMINE); otherwise
+        // STORE is a no-op that just echoes \Seen so clients don't error.
+        if (!_writable)
         {
-            // Read-only: accept but persist nothing. Echo \Seen back so clients don't error.
             foreach (var (seq, _) in targets)
                 await SendAsync($"* {seq} FETCH (FLAGS (\\Seen))\r\n", ct).ConfigureAwait(false);
             await SendAsync($"{tag} OK {(byUid ? "UID " : "")}STORE completed\r\n", ct).ConfigureAwait(false);
@@ -428,9 +470,10 @@ public sealed class ImapSession
     private async Task ExpungeAsync(string tag, HashSet<long>? restrictUids, bool byUid, CancellationToken ct)
     {
         if (_selectedName is null) { await SendAsync($"{tag} NO No mailbox selected\r\n", ct).ConfigureAwait(false); return; }
-        if (!_options.AllowDelete)
+        if (!_writable)
         {
-            await SendAsync($"{tag} NO [CANNOT] Inbix mailboxes are read-only (set Inbix:Imap:AllowDelete to enable)\r\n", ct).ConfigureAwait(false);
+            // Read-only (or EXAMINE, or AllowDelete off): never expunge.
+            await SendAsync($"{tag} NO [CANNOT] Mailbox is read-only (open with SELECT and set Inbix:Imap:AllowDelete to enable deletes)\r\n", ct).ConfigureAwait(false);
             return;
         }
         await DoExpungeAsync(silent: false, restrictUids, ct).ConfigureAwait(false);
@@ -463,22 +506,26 @@ public sealed class ImapSession
 
     // ---- IDLE ----
 
-    private async Task IdleAsync(string tag, CancellationToken ct)
+    // Returns true when the connection should be dropped (idle timeout).
+    private async Task<bool> IdleAsync(string tag, CancellationToken ct)
     {
-        if (_selectedName is null) { await SendAsync($"{tag} BAD No mailbox selected\r\n", ct).ConfigureAwait(false); return; }
+        if (_selectedName is null) { await SendAsync($"{tag} BAD No mailbox selected\r\n", ct).ConfigureAwait(false); return false; }
 
         var signal = Channel.CreateUnbounded<bool>();
         void OnEvent(InboxEvent _) => signal.Writer.TryWrite(true);
         _notifier.Received += OnEvent;
         await SendAsync("+ idling\r\n", ct).ConfigureAwait(false);
+
+        using var idleCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        idleCts.CancelAfter(IdleTimeout); // don't let an IDLE connection hold a slot forever
+        var readDone = ReadLineAsync(idleCts.Token);
+        var timedOut = false;
         try
         {
-            var readDone = ReadLineAsync(ct);
             while (true)
             {
                 var wake = signal.Reader.WaitToReadAsync(ct).AsTask();
-                var done = await Task.WhenAny(readDone, wake).ConfigureAwait(false);
-                if (done == readDone) break; // client sent DONE (or disconnected)
+                if (await Task.WhenAny(readDone, wake).ConfigureAwait(false) == readDone) break; // client sent DONE / disconnected / timed out
 
                 while (signal.Reader.TryRead(out _)) { }
                 var refreshed = await _mailboxes.GetMessagesAsync(_selectedName, ct).ConfigureAwait(false);
@@ -488,12 +535,17 @@ public sealed class ImapSession
                     await SendAsync($"* {_selected.Count} EXISTS\r\n", ct).ConfigureAwait(false);
                 }
             }
+            try { await readDone.ConfigureAwait(false); } // observe the read (avoid unobserved exception)
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested) { timedOut = true; }
         }
         finally
         {
             _notifier.Received -= OnEvent;
         }
+
+        if (timedOut) { await SendAsync("* BYE idle timeout\r\n", ct).ConfigureAwait(false); return true; }
         await SendAsync($"{tag} OK IDLE terminated\r\n", ct).ConfigureAwait(false);
+        return false;
     }
 
     // ---- Sequence / item parsing ----
@@ -649,7 +701,10 @@ public sealed class ImapSession
                 var inner = line[(brace + 1)..^1];
                 var nonSync = inner.EndsWith('+');
                 if (nonSync) inner = inner[..^1];
-                if (int.TryParse(inner, out var n) && n >= 0 && n <= 64 * 1024 * 1024)
+                // Cap literals — tiny before auth (only LOGIN needs one) — so an unauthenticated peer
+                // can't force a large allocation. An over-cap literal falls through and the command is rejected.
+                var literalCap = _authenticated ? PostAuthLiteralCap : PreAuthLiteralCap;
+                if (int.TryParse(inner, out var n) && n >= 0 && n <= literalCap)
                 {
                     sb.Append(line[..brace]);
                     if (!nonSync) await SendAsync("+ Ready for literal\r\n", ct).ConfigureAwait(false);
