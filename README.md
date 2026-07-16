@@ -20,6 +20,10 @@ message in full, and serves it back through a fast read-only web UI and API. Not
 
 > Built entirely in C# on ASP.NET Core / .NET 10. Runs as a Windows Service or in Docker.
 
+> 🚀 **New here? Follow the [Setup Checklist](CHECKLIST.md)** — a tickable, start-to-finish list
+> (buy a domain → DNS → open port 25 → run → verify), including how to run on a **dynamic IP** and
+> why you can **skip DKIM/SPF/DMARC**. For the detailed guide see [SETUP.md](SETUP.md).
+
 ---
 
 ## Screenshots
@@ -333,6 +337,19 @@ cp ./data/backups/inbix-YYYYMMDD-HHMMSS-<id>.db ./data/inbix.db   # remove inbix
 
 ## Docker
 
+The release pipeline publishes a prebuilt image to GHCR — `ghcr.io/wixely/inbix:latest` (see
+[Releasing an image](#releasing-an-image)). The package is **behind GitHub auth**, so log in with a
+Personal Access Token (`read:packages` scope) before pulling:
+
+```bash
+echo <YOUR_PAT> | docker login ghcr.io -u <your-github-username> --password-stdin
+docker pull ghcr.io/wixely/inbix:latest
+# point docker-compose.yml at `image: ghcr.io/wixely/inbix:latest`, then:
+docker compose up -d
+```
+
+Or build it yourself from source:
+
 ```bash
 docker compose up -d --build
 ```
@@ -390,6 +407,10 @@ A/CNAME mail.mydomain.com -> your public IP / DDNS hostname   (gray cloud / DNS-
 ```
 
 Port 25 must be reachable from the internet. **Verify your ISP allows inbound port 25 before relying on this.**
+
+On a **dynamic IP**, CNAME the MX target to a Dynamic-DNS hostname so DNS tracks your changing IP —
+step-by-step in the [Setup Checklist](CHECKLIST.md#if-your-public-ip-changes-dynamic-ip). Because Inbix
+never sends, there are **no SPF/DKIM/DMARC/PTR requirements**, which is exactly why a dynamic IP works.
 
 ## Testing
 

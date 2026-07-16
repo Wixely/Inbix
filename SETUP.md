@@ -1,8 +1,11 @@
 # Inbix — Setup & Deployment Guide
 
-A practical checklist for standing up Inbix so it actually receives mail from the internet.
+A practical guide for standing up Inbix so it actually receives mail from the internet.
 This is the "what you need from the outside world, and in what order" guide; for the full
 configuration reference and architecture, see the [README](README.md).
+
+> Prefer a quick tickable list? Use the [Setup Checklist](CHECKLIST.md) and come back here for the
+> detail behind any step.
 
 > **What Inbix is:** an inbound-only alias mailbox. It receives mail over SMTP for addresses you
 > define (e.g. `spotify@yourdomain.com`), stores it, and lets you read it. **It never sends.**
@@ -58,6 +61,14 @@ AAAA   mail.yourdomain.com.       2001:db8::10        ; only if you serve mail o
 > ⚠️ **Cloudflare users:** the mail host's A/AAAA record must be **DNS-only (grey cloud)**, not
 > proxied. Cloudflare's proxy does not forward port 25, so a proxied (orange-cloud) record will
 > silently swallow all inbound mail.
+>
+> ⚠️ **This DNS-only record publishes your real public IP.** If the *same* IP also serves a site you
+> keep behind Cloudflare's proxy (orange cloud), the grey-cloud mail record **leaks the origin IP** —
+> anyone can resolve `mail.yourdomain.com` and bypass the proxy/WAF/DDoS protection to hit the origin
+> directly. **Use a brand-new, dedicated domain for Inbix** (and ideally a host/IP that runs nothing
+> you're protecting) so its exposed IP isn't tied to anything sensitive. **Cloudflare Registrar** is
+> one of the cheapest places to buy that domain (at-cost pricing), and you can transfer it elsewhere
+> later if you like.
 
 DNS changes take time to propagate (minutes to hours depending on TTL). Verify with:
 
@@ -91,6 +102,20 @@ to the internet directly.** Keep it on a LAN/VPN, or put it behind a reverse pro
 Pick one. Full details for each are in the [README](README.md); the essentials:
 
 ### Docker (recommended)
+
+**Use the prebuilt image** from GitHub Container Registry, published by the release pipeline on every
+version tag: `ghcr.io/wixely/inbix:latest` (also `:1.11.1`, `:1.11`, `:1`, and the commit SHA).
+
+> 🔐 **The GHCR package is behind GitHub auth** — log in with a **Personal Access Token** carrying the
+> **`read:packages`** scope before pulling:
+> ```bash
+> echo <YOUR_PAT> | docker login ghcr.io -u <your-github-username> --password-stdin
+> docker pull ghcr.io/wixely/inbix:latest
+> ```
+> In `docker-compose.yml`, swap `build: .` / `image: inbix:local` for `image: ghcr.io/wixely/inbix:latest`
+> and run `docker compose up -d` (no `--build`).
+
+Or **build locally** (no GHCR login needed):
 
 ```bash
 cp docker-compose.yml docker-compose.override.yml   # or edit in place
