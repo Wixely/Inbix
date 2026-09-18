@@ -22,7 +22,7 @@ public sealed class JsonMessageRepository : IMessageRepository
         _store.WriteAsync(async c =>
         {
             var sm = StoredMessage.FromMessage(message);
-            sm.Id = _store.NextMessageId();
+            sm.Id = await _store.NextMessageIdAsync(c).ConfigureAwait(false);
             _store.Messages[sm.Id] = sm;
             await _store.PersistMessageAsync(sm, c).ConfigureAwait(false);
             return sm.Id;

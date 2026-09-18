@@ -94,6 +94,34 @@ public sealed class ImapServerTests : IAsyncLifetime
         await client.DisconnectAsync(quit: true);
     }
 
+    [Theory]
+    [InlineData(0, 1)]
+    [InlineData(1, 3)]
+    [InlineData(2, 100)]
+    [InlineData(100, 10)]
+    public async Task Client_Can_Download_Partial_Body_As_Octets(int offset, int count)
+    {
+        var body = Encoding.UTF8.GetBytes("caf\u00e9 \u2603\r\n");
+        var headers = Encoding.ASCII.GetBytes("From: a@example.test\r\nTo: spotify@mydomain.com\r\n" +
+            "Subject: Partial fetch\r\nContent-Type: text/plain; charset=utf-8\r\n" +
+            "Content-Transfer-Encoding: 8bit\r\n\r\n");
+        await _host.Services.GetRequiredService<IInboundMessageSink>().SaveAsync(new InboundMessage
+        {
+            Recipient = "spotify@mydomain.com", Sender = "a@example.test",
+            RawMime = headers.Concat(body).ToArray(), ReceivedAt = DateTimeOffset.UtcNow
+        });
+
+        using var client = new ImapClient { Timeout = 5000 };
+        await client.ConnectAsync("127.0.0.1", _port, SecureSocketOptions.None);
+        await client.AuthenticateAsync("admin", "admin");
+        await client.Inbox.OpenAsync(FolderAccess.ReadOnly);
+        using var part = await client.Inbox.GetStreamAsync(1, "TEXT", offset, count);
+        using var actual = new MemoryStream();
+        await part.CopyToAsync(actual);
+        Assert.Equal(body.Skip(offset).Take(count).ToArray(), actual.ToArray());
+        await client.DisconnectAsync(quit: true);
+    }
+
     [Fact]
     public async Task Bad_Credentials_Are_Rejected()
     {

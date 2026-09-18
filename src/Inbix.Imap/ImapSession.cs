@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Threading.Channels;
 using Inbix.Core.Abstractions;
@@ -35,7 +36,9 @@ public sealed class ImapSession
     private string? _selectedName;
     private bool _writable;              // current selection allows \Deleted/EXPUNGE (SELECT + AllowDelete, not EXAMINE)
     private List<Message> _selected = [];
-    private readonly HashSet<long> _deleted = []; // message ids flagged \Deleted this session (AllowDelete)
+    private Dictionary<long, uint> _uids = [];
+    private uint _validity;
+    private readonly HashSet<long> _deleted = []; // selected snapshot of persisted mailbox delete flags
 
     private readonly byte[] _rbuf = new byte[16384];
     private int _rlen, _rpos;
@@ -82,6 +85,14 @@ public sealed class ImapSession
             {
                 if (await DispatchAsync(tag, rest, ct).ConfigureAwait(false)) break; // LOGOUT / forced close
             }
+            catch (FormatException)
+            {
+                await SendAsync($"{tag} BAD Invalid command syntax\r\n", ct).ConfigureAwait(false);
+            }
+            catch (IOException)
+            {
+                await SendAsync($"{tag} NO Message data unavailable\r\n", ct).ConfigureAwait(false);
+            }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 // Log only the command verb, never the arguments (they can contain a LOGIN password).
@@ -103,6 +114,14 @@ public sealed class ImapSession
     {
         var tokens = Tokenize(rest);
         var cmd = tokens.Count > 0 ? tokens[0].ToUpperInvariant() : "";
+        if (_authenticated && cmd is ("LOGIN" or "AUTHENTICATE"))
+        {
+            await SendAsync($"{tag} BAD Already authenticated\r\n", ct); return false;
+        }
+        if (_selectedName is null && cmd is ("CHECK" or "CLOSE" or "EXPUNGE" or "FETCH" or "SEARCH" or "STORE" or "UID" or "COPY"))
+        {
+            await SendAsync($"{tag} BAD No mailbox selected\r\n", ct); return false;
+        }
 
         switch (cmd)
         {
@@ -111,6 +130,7 @@ public sealed class ImapSession
                 return false;
             case "NOOP":
             case "CHECK":
+                if (_selectedName is not null) await RefreshAsync(ct);
                 await SendAsync($"{tag} OK {cmd} completed\r\n", ct).ConfigureAwait(false);
                 return false;
             case "LOGOUT":
@@ -162,11 +182,14 @@ public sealed class ImapSession
                 await SendAsync($"{tag} OK CLOSE completed\r\n", ct).ConfigureAwait(false); break;
             case "SUBSCRIBE":
             case "UNSUBSCRIBE":
+                if (tokens.Count != 2) throw new FormatException();
+                await _mailboxes.SubscribeAsync(tokens[1], cmd == "SUBSCRIBE", ct);
                 await SendAsync($"{tag} OK {cmd} completed\r\n", ct).ConfigureAwait(false); break;
             case "CREATE":
             case "DELETE":
             case "RENAME":
             case "APPEND":
+            case "COPY":
                 await SendAsync($"{tag} NO [CANNOT] Inbix mailboxes are read-only\r\n", ct).ConfigureAwait(false); break;
             default:
                 await SendAsync($"{tag} BAD Unknown command\r\n", ct).ConfigureAwait(false); break;
@@ -190,7 +213,12 @@ public sealed class ImapSession
             return;
         }
         await SendAsync("+ \r\n", ct).ConfigureAwait(false);
-        var b64 = await ReadLineAsync(ct).ConfigureAwait(false);
+        using var authCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        authCts.CancelAfter(PreAuthTimeout);
+        string? b64;
+        try { b64 = await ReadLineAsync(authCts.Token).ConfigureAwait(false); }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        { _closing = true; await SendAsync("* BYE authentication timeout\r\n", ct); return; }
         if (b64 is null) return;
         try
         {
@@ -243,6 +271,7 @@ public sealed class ImapSession
         var reference = tokens.Count > 1 ? tokens[1] : "";
         var pattern = tokens.Count > 2 ? tokens[2] : "*";
         var sb = new StringBuilder();
+        var subscriptions = cmd == "LSUB" ? await _mailboxes.SubscriptionsAsync(ct) : null;
 
         if (pattern.Length == 0)
         {
@@ -252,7 +281,21 @@ public sealed class ImapSession
         else
         {
             var rx = PatternRegex(reference + pattern);
-            foreach (var mb in await _mailboxes.ListAsync(ct).ConfigureAwait(false))
+            var available = await _mailboxes.ListAsync(ct).ConfigureAwait(false);
+            IEnumerable<ImapMailbox> listed = available;
+            if (subscriptions is not null)
+            {
+                var subscribed = subscriptions.ToDictionary(n => n, n => new ImapMailbox(n, available.Any(m => m.Name == n && m.Selectable)));
+                // LSUB retains subscribed names even after an alias is removed. With %, expose parents
+                // needed to reach subscribed descendants, without subscribing those parents implicitly.
+                if (pattern.Contains('%')) foreach (var name in subscriptions)
+                {
+                    for (var slash = name.IndexOf('/'); slash >= 0; slash = name.IndexOf('/', slash + 1))
+                        subscribed.TryAdd(name[..slash], new(name[..slash], false));
+                }
+                listed = subscribed.Values.OrderBy(m => m.Name, StringComparer.Ordinal);
+            }
+            foreach (var mb in listed)
                 if (rx.IsMatch(mb.Name))
                 {
                     var attrs = mb.Selectable ? "\\HasNoChildren" : "\\Noselect \\HasChildren";
@@ -276,26 +319,28 @@ public sealed class ImapSession
     {
         if (tokens.Count < 2) { await SendAsync($"{tag} BAD missing mailbox\r\n", ct).ConfigureAwait(false); return; }
         var name = tokens[1];
-        var msgs = await _mailboxes.GetMessagesAsync(name, ct).ConfigureAwait(false);
-        if (msgs is null) { await SendAsync($"{tag} NO [NONEXISTENT] Mailbox does not exist\r\n", ct).ConfigureAwait(false); return; }
+        _selectedName = null; _selected = []; _uids = []; _deleted.Clear(); _writable = false;
+        var snapshot = await _mailboxes.SnapshotAsync(name, ct).ConfigureAwait(false);
+        if (snapshot is null) { await SendAsync($"{tag} NO [NONEXISTENT] Mailbox does not exist\r\n", ct).ConfigureAwait(false); return; }
 
         _selectedName = name;
-        _selected = msgs.ToList();
+        _selected = snapshot.Messages.ToList();
+        _uids = snapshot.Uids.ToDictionary();
+        _validity = snapshot.Validity;
         _deleted.Clear();
+        foreach (var m in _selected) if (snapshot.Deleted.Contains(Uid(m))) _deleted.Add(m.Id);
 
         // SELECT is read-write only when deletes are allowed; EXAMINE is always read-only.
         var writable = _options.AllowDelete && !examine;
         _writable = writable;
-        var uidNext = (_selected.Count > 0 ? _selected[^1].Id : 0) + 1;
+        var uidNext = snapshot.NextUid;
         var sb = new StringBuilder();
         sb.Append(writable ? "* FLAGS (\\Seen \\Deleted)\r\n" : "* FLAGS (\\Seen)\r\n");
         sb.Append($"* {_selected.Count} EXISTS\r\n");
         sb.Append("* 0 RECENT\r\n");
-        sb.Append("* OK [UIDVALIDITY 1] UIDs valid\r\n");
+        sb.Append($"* OK [UIDVALIDITY {_validity}] UIDs valid\r\n");
         sb.Append($"* OK [UIDNEXT {uidNext}] Predicted next UID\r\n");
-        sb.Append(writable
-            ? "* OK [PERMANENTFLAGS (\\Deleted)] Deletes are permanent\r\n"
-            : "* OK [PERMANENTFLAGS ()] No permanent flags (read-only)\r\n");
+        sb.Append(writable ? "* OK [PERMANENTFLAGS (\\Deleted)] Delete flags persist\r\n" : "* OK [PERMANENTFLAGS ()] Read-only\r\n");
         sb.Append($"{tag} OK [{(writable ? "READ-WRITE" : "READ-ONLY")}] SELECT completed\r\n");
         await SendAsync(sb.ToString(), ct).ConfigureAwait(false);
     }
@@ -304,11 +349,17 @@ public sealed class ImapSession
     {
         if (tokens.Count < 2) { await SendAsync($"{tag} BAD missing mailbox\r\n", ct).ConfigureAwait(false); return; }
         var name = tokens[1];
-        var msgs = await _mailboxes.GetMessagesAsync(name, ct).ConfigureAwait(false);
-        if (msgs is null) { await SendAsync($"{tag} NO Mailbox does not exist\r\n", ct).ConfigureAwait(false); return; }
-        var uidNext = (msgs.Count > 0 ? msgs[^1].Id : 0) + 1;
+        if (tokens.Count != 3) throw new FormatException();
+        var snapshot = await _mailboxes.SnapshotAsync(name, ct).ConfigureAwait(false);
+        if (snapshot is null) { await SendAsync($"{tag} NO Mailbox does not exist\r\n", ct).ConfigureAwait(false); return; }
+        var fields = Tokenize(tokens[2].Trim('(', ')')).Select(f => f.ToUpperInvariant()).Select(f => f switch
+        {
+            "MESSAGES" => $"MESSAGES {snapshot.Messages.Count}", "RECENT" => "RECENT 0", "UNSEEN" => "UNSEEN 0",
+            "UIDNEXT" => $"UIDNEXT {snapshot.NextUid}", "UIDVALIDITY" => $"UIDVALIDITY {snapshot.Validity}",
+            _ => throw new FormatException()
+        });
         await SendAsync(
-            $"* STATUS {ImapFormat.NString(name)} (MESSAGES {msgs.Count} RECENT 0 UIDNEXT {uidNext} UIDVALIDITY 1 UNSEEN 0)\r\n" +
+            $"* STATUS {ImapFormat.NString(name)} ({string.Join(' ', fields)})\r\n" +
             $"{tag} OK STATUS completed\r\n", ct).ConfigureAwait(false);
     }
 
@@ -331,10 +382,16 @@ public sealed class ImapSession
     private async Task FetchAsync(string tag, List<string> tokens, bool byUid, CancellationToken ct)
     {
         if (_selectedName is null) { await SendAsync($"{tag} NO No mailbox selected\r\n", ct).ConfigureAwait(false); return; }
-        if (tokens.Count < 3) { await SendAsync($"{tag} BAD FETCH expects a set and items\r\n", ct).ConfigureAwait(false); return; }
+        if (tokens.Count != 3) { await SendAsync($"{tag} BAD FETCH expects a set and items\r\n", ct).ConfigureAwait(false); return; }
 
         var targets = Resolve(tokens[1], byUid);
-        var items = ParseFetchItems(tokens[2]);
+        List<FetchItem> items;
+        try { items = ParseFetchItems(tokens[2]); }
+        catch (FormatException)
+        {
+            await SendAsync($"{tag} BAD Invalid FETCH items\r\n", ct).ConfigureAwait(false);
+            return;
+        }
 
         foreach (var (seq, msg) in targets)
             await WriteFetchAsync(seq, msg, items, byUid, ct).ConfigureAwait(false);
@@ -346,32 +403,40 @@ public sealed class ImapSession
     {
         // UID FETCH always includes UID in the response even if not requested.
         var wantUid = byUid || items.Any(i => i.Name == "UID");
-        var needRaw = items.Any(i => i.Name is "BODY" or "BODYSTRUCTURE" or "BODY[section]");
+        var needRaw = items.Any(i => i.Name is "BODY" or "BODYSTRUCTURE" or "BODY[section]" or "ENVELOPE");
         var raw = needRaw ? await LoadRawAsync(msg, ct).ConfigureAwait(false) : [];
 
-        var w = new MemoryStream();
+        using var parsed = items.Any(i => i.Name is "ENVELOPE" or "BODY" or "BODYSTRUCTURE") ? ParseMime(raw) : null;
+        using var w = new MemoryStream();
         void Text(string s) { var b = Encoding.UTF8.GetBytes(s); w.Write(b, 0, b.Length); }
 
         Text($"* {seq} FETCH (");
         var first = true;
         void Sep() { if (!first) Text(" "); first = false; }
 
-        if (wantUid) { Sep(); Text($"UID {msg.Id}"); }
+        if (wantUid) { Sep(); Text($"UID {Uid(msg)}"); }
 
         foreach (var item in items)
         {
             switch (item.Name)
             {
                 case "UID": break; // already emitted
-                case "FLAGS": Sep(); Text("FLAGS (\\Seen)"); break;
+                case "FLAGS": Sep(); Text($"FLAGS ({FlagsFor(msg)})"); break;
                 case "INTERNALDATE": Sep(); Text($"INTERNALDATE {ImapFormat.InternalDate(msg.ReceivedAt)}"); break;
                 case "RFC822.SIZE": Sep(); Text($"RFC822.SIZE {msg.SizeBytes}"); break;
-                case "ENVELOPE": Sep(); Text($"ENVELOPE {ImapFormat.Envelope(msg)}"); break;
+                case "ENVELOPE": Sep(); Text($"ENVELOPE {ImapFormat.Envelope(parsed!)}"); break;
                 case "BODY":
                 case "BODYSTRUCTURE":
-                    Sep(); Text($"{item.Name} {BodyStructureOf(raw)}"); break;
+                    Sep(); Text($"{item.Name} {ImapFormat.BodyStructure(parsed!.Body)}"); break;
                 default: // BODY[section] / BODY.PEEK[section] / RFC822[.HEADER/.TEXT]
-                    var data = ImapFormat.Section(raw, item.Section ?? "") ?? [];
+                    var data = ImapFormat.Section(raw, item.Section ?? "");
+                    if (data is null) { Sep(); Text($"{item.Label} NIL"); break; }
+                    if (item.Offset is { } offset)
+                    {
+                        // IMAP partials count octets after section/header filtering, not characters.
+                        data = offset >= data.Length ? [] : data.AsSpan((int)offset,
+                            (int)Math.Min(item.Count, (uint)(data.Length - (int)offset))).ToArray();
+                    }
                     Sep();
                     Text($"{item.Label} {{{data.Length}}}\r\n");
                     w.Write(data, 0, data.Length);
@@ -383,29 +448,24 @@ public sealed class ImapSession
         await SendBytesAsync(w.ToArray(), ct).ConfigureAwait(false);
     }
 
-    private static string BodyStructureOf(byte[]? raw)
+    private static MimeKit.MimeMessage ParseMime(byte[] raw)
     {
-        if (raw is null || raw.Length == 0) return "(\"TEXT\" \"PLAIN\" NIL NIL NIL \"7BIT\" 0 0)";
         try
         {
             using var ms = new MemoryStream(raw);
-            var msg = MimeKit.MimeMessage.Load(ms);
-            return msg.Body is null ? "(\"TEXT\" \"PLAIN\" NIL NIL NIL \"7BIT\" 0 0)" : ImapFormat.BodyStructure(msg.Body);
+            return MimeKit.MimeMessage.Load(ms);
         }
-        catch { return "(\"TEXT\" \"PLAIN\" NIL NIL NIL \"7BIT\" 0 0)"; }
+        catch (FormatException ex) { throw new IOException("Invalid stored MIME message.", ex); }
     }
 
     private async Task<byte[]> LoadRawAsync(Message msg, CancellationToken ct)
     {
-        if (string.IsNullOrEmpty(msg.RawStoragePath)) return [];
-        try
-        {
-            await using var s = await _rawStore.OpenReadAsync(msg.RawStoragePath, ct).ConfigureAwait(false);
-            using var ms = new MemoryStream();
-            await s.CopyToAsync(ms, ct).ConfigureAwait(false);
-            return ms.ToArray();
-        }
-        catch { return []; }
+        if (string.IsNullOrEmpty(msg.RawStoragePath)) throw new IOException("Missing raw message path.");
+        await using var s = await _rawStore.OpenReadAsync(msg.RawStoragePath, ct).ConfigureAwait(false);
+        using var ms = new MemoryStream();
+        await s.CopyToAsync(ms, ct).ConfigureAwait(false);
+        if (ms.Length == 0) throw new IOException("Empty stored MIME message.");
+        return ms.ToArray();
     }
 
     // ---- SEARCH / STORE ----
@@ -414,52 +474,65 @@ public sealed class ImapSession
     {
         if (_selectedName is null) { await SendAsync($"{tag} NO No mailbox selected\r\n", ct).ConfigureAwait(false); return; }
 
-        // Minimal: ALL (everything) and UID <set>. Anything else → ALL (safe for read-only browsing).
-        IEnumerable<(int seq, Message m)> hits = _selected.Select((m, i) => (i + 1, m));
-        var arg = tokens.Count > 1 ? tokens[1].ToUpperInvariant() : "ALL";
-        if (arg == "UID" && tokens.Count > 2)
-            hits = Resolve(tokens[2], byUid: true);
-
-        var ids = hits.Select(h => byUid ? h.m.Id : h.seq);
+        var criteria = tokens.Skip(1).ToList();
+        if (criteria.Count >= 2 && criteria[0].Equals("CHARSET", StringComparison.OrdinalIgnoreCase))
+        {
+            if (criteria[1].ToUpperInvariant() is not ("US-ASCII" or "UTF-8"))
+            { await SendAsync($"{tag} NO [BADCHARSET (US-ASCII UTF-8)] Unsupported charset\r\n", ct); return; }
+            criteria.RemoveRange(0, 2);
+        }
+        var search = new ImapSearch(_selected.Count, _selected.Count == 0 ? 0 : Uid(_selected[^1]));
+        var predicate = search.Parse(criteria);
+        var ids = new List<long>();
+        for (var i = 0; i < _selected.Count; i++)
+        {
+            var message = _selected[i];
+            using var mime = search.NeedsMime ? ParseMime(await LoadRawAsync(message, ct)) : null;
+            if (predicate(new(message, i + 1, Uid(message), _deleted.Contains(message.Id), mime)))
+                ids.Add(byUid ? Uid(message) : i + 1);
+        }
         await SendAsync($"* SEARCH {string.Join(' ', ids)}\r\n{tag} OK {(byUid ? "UID " : "")}SEARCH completed\r\n", ct).ConfigureAwait(false);
     }
 
     private async Task StoreAsync(string tag, List<string> tokens, bool byUid, CancellationToken ct)
     {
         if (_selectedName is null) { await SendAsync($"{tag} NO No mailbox selected\r\n", ct).ConfigureAwait(false); return; }
-        var targets = Resolve(tokens.Count > 1 ? tokens[1] : "", byUid);
+        if (tokens.Count != 4) throw new FormatException();
+        var targets = Resolve(tokens[1], byUid);
+        var item = tokens[2].ToUpperInvariant();
+        if (item is not ("FLAGS" or "+FLAGS" or "-FLAGS" or "FLAGS.SILENT" or "+FLAGS.SILENT" or "-FLAGS.SILENT")) throw new FormatException();
+        var silent = item.EndsWith(".SILENT", StringComparison.Ordinal);
 
         // \Deleted is only honoured on a read-write selection (SELECT + AllowDelete, not EXAMINE); otherwise
         // STORE is a no-op that just echoes \Seen so clients don't error.
         if (!_writable)
         {
-            foreach (var (seq, _) in targets)
-                await SendAsync($"* {seq} FETCH (FLAGS (\\Seen))\r\n", ct).ConfigureAwait(false);
+            if (!silent) foreach (var (seq, msg) in targets)
+                await SendAsync($"* {seq} FETCH ({(byUid ? $"UID {Uid(msg)} " : "")}FLAGS ({FlagsFor(msg)}))\r\n", ct).ConfigureAwait(false);
             await SendAsync($"{tag} OK {(byUid ? "UID " : "")}STORE completed\r\n", ct).ConfigureAwait(false);
             return;
         }
 
         // Honour \Deleted so EXPUNGE can remove mail; other flags aren't persisted.
-        var item = tokens.Count > 2 ? tokens[2].ToUpperInvariant() : "";
-        var silent = item.Contains(".SILENT", StringComparison.Ordinal);
-        var flags = tokens.Count > 3 ? tokens[3] : "";
-        var hasDeleted = flags.Contains("\\Deleted", StringComparison.OrdinalIgnoreCase);
+        var flags = tokens[3];
+        if (!flags.StartsWith('(') || !flags.EndsWith(')')) throw new FormatException();
+        var hasDeleted = Tokenize(flags[1..^1]).Contains("\\Deleted", StringComparer.OrdinalIgnoreCase);
         var op = item.StartsWith("+FLAGS", StringComparison.Ordinal) ? '+'
                : item.StartsWith("-FLAGS", StringComparison.Ordinal) ? '-' : '=';
 
         foreach (var (seq, msg) in targets)
         {
-            if (op == '-') { if (hasDeleted) _deleted.Remove(msg.Id); }
-            else if (op == '+') { if (hasDeleted) _deleted.Add(msg.Id); }
-            else { if (hasDeleted) _deleted.Add(msg.Id); else _deleted.Remove(msg.Id); } // FLAGS (replace)
+            var deleted = await _mailboxes.StoreDeletedAsync(_selectedName!, Uid(msg), op, hasDeleted, ct);
+            if (deleted) _deleted.Add(msg.Id); else _deleted.Remove(msg.Id);
 
             if (!silent)
-                await SendAsync($"* {seq} FETCH (FLAGS ({FlagsFor(msg)}))\r\n", ct).ConfigureAwait(false);
+                await SendAsync($"* {seq} FETCH ({(byUid ? $"UID {Uid(msg)} " : "")}FLAGS ({FlagsFor(msg)}))\r\n", ct).ConfigureAwait(false);
         }
         await SendAsync($"{tag} OK {(byUid ? "UID " : "")}STORE completed\r\n", ct).ConfigureAwait(false);
     }
 
     private string FlagsFor(Message m) => _deleted.Contains(m.Id) ? "\\Seen \\Deleted" : "\\Seen";
+    private uint Uid(Message m) => _uids[m.Id];
 
     private HashSet<long>? UidSet(string set)
     {
@@ -476,6 +549,7 @@ public sealed class ImapSession
             await SendAsync($"{tag} NO [CANNOT] Mailbox is read-only (open with SELECT and set Inbix:Imap:AllowDelete to enable deletes)\r\n", ct).ConfigureAwait(false);
             return;
         }
+        await RefreshAsync(ct);
         await DoExpungeAsync(silent: false, restrictUids, ct).ConfigureAwait(false);
         await SendAsync($"{tag} OK {(byUid ? "UID " : "")}EXPUNGE completed\r\n", ct).ConfigureAwait(false);
     }
@@ -484,11 +558,14 @@ public sealed class ImapSession
     // out highest-seq first so the sequence numbers stay valid as messages are removed.
     private async Task DoExpungeAsync(bool silent, HashSet<long>? restrictUids, CancellationToken ct)
     {
+        var snapshot = await _mailboxes.SnapshotAsync(_selectedName!, ct);
+        if (snapshot is null || snapshot.Validity != _validity) throw new IOException("Mailbox changed.");
         var seqs = new List<int>();
         for (var i = 0; i < _selected.Count; i++)
         {
             var id = _selected[i].Id;
-            if (_deleted.Contains(id) && (restrictUids is null || restrictUids.Contains(id)))
+            if (snapshot.Uids.TryGetValue(id, out var uid) && uid == Uid(_selected[i]) && snapshot.Deleted.Contains(uid) &&
+                (restrictUids is null || restrictUids.Contains(id)))
                 seqs.Add(i + 1);
         }
         seqs.Sort();
@@ -506,61 +583,95 @@ public sealed class ImapSession
 
     // ---- IDLE ----
 
-    // Returns true when the connection should be dropped (idle timeout).
+    private async Task RefreshAsync(CancellationToken ct)
+    {
+        if (_selectedName is null) return;
+        var snapshot = await _mailboxes.SnapshotAsync(_selectedName, ct);
+        if (snapshot is null || snapshot.Validity != _validity)
+        {
+            _selectedName = null; _selected = []; _uids = []; _deleted.Clear(); _writable = false;
+            throw new IOException("Selected mailbox no longer exists.");
+        }
+        for (var i = _selected.Count - 1; i >= 0; i--)
+        {
+            var old = _selected[i];
+            if (!snapshot.Uids.TryGetValue(old.Id, out var uid) || uid != Uid(old))
+            {
+                _selected.RemoveAt(i);
+                _deleted.Remove(old.Id);
+                await SendAsync($"* {i + 1} EXPUNGE\r\n", ct);
+            }
+        }
+        var changed = _selected.Count != snapshot.Messages.Count;
+        _selected = snapshot.Messages.ToList();
+        _uids = snapshot.Uids.ToDictionary();
+        if (changed) await SendAsync($"* {_selected.Count} EXISTS\r\n", ct);
+        for (var i = 0; i < _selected.Count; i++)
+        {
+            var m = _selected[i];
+            var deleted = snapshot.Deleted.Contains(Uid(m));
+            var wasDeleted = _deleted.Contains(m.Id);
+            if (deleted) _deleted.Add(m.Id); else _deleted.Remove(m.Id);
+            if (wasDeleted != deleted) await SendAsync($"* {i + 1} FETCH (UID {Uid(m)} FLAGS ({FlagsFor(m)}))\r\n", ct);
+        }
+    }
+
     private async Task<bool> IdleAsync(string tag, CancellationToken ct)
     {
-        if (_selectedName is null) { await SendAsync($"{tag} BAD No mailbox selected\r\n", ct).ConfigureAwait(false); return false; }
-
-        var signal = Channel.CreateUnbounded<bool>();
+        if (_selectedName is null) { await SendAsync($"{tag} BAD No mailbox selected\r\n", ct); return false; }
+        await RefreshAsync(ct);
+        var signal = Channel.CreateBounded<bool>(new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.DropWrite });
         void OnEvent(InboxEvent _) => signal.Writer.TryWrite(true);
         _notifier.Received += OnEvent;
-        await SendAsync("+ idling\r\n", ct).ConfigureAwait(false);
-
         using var idleCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        idleCts.CancelAfter(IdleTimeout); // don't let an IDLE connection hold a slot forever
+        idleCts.CancelAfter(IdleTimeout);
+        await SendAsync("+ idling\r\n", ct);
         var readDone = ReadLineAsync(idleCts.Token);
-        var timedOut = false;
         try
         {
-            while (true)
+            while (!readDone.IsCompleted)
             {
-                var wake = signal.Reader.WaitToReadAsync(ct).AsTask();
-                if (await Task.WhenAny(readDone, wake).ConfigureAwait(false) == readDone) break; // client sent DONE / disconnected / timed out
-
+                using var poll = CancellationTokenSource.CreateLinkedTokenSource(idleCts.Token);
+                poll.CancelAfter(TimeSpan.FromSeconds(5));
+                var wake = signal.Reader.WaitToReadAsync(poll.Token).AsTask();
+                await Task.WhenAny(readDone, wake);
+                poll.Cancel();
+                try { await wake; } catch (OperationCanceledException) { }
+                if (readDone.IsCompleted) break;
                 while (signal.Reader.TryRead(out _)) { }
-                var refreshed = await _mailboxes.GetMessagesAsync(_selectedName, ct).ConfigureAwait(false);
-                if (refreshed is not null && refreshed.Count != _selected.Count)
-                {
-                    _selected = refreshed.ToList();
-                    await SendAsync($"* {_selected.Count} EXISTS\r\n", ct).ConfigureAwait(false);
-                }
+                await RefreshAsync(ct);
             }
-            try { await readDone.ConfigureAwait(false); } // observe the read (avoid unobserved exception)
-            catch (OperationCanceledException) when (!ct.IsCancellationRequested) { timedOut = true; }
+            var done = await readDone;
+            if (done is null) return true;
+            await SendAsync(done.Equals("DONE", StringComparison.OrdinalIgnoreCase)
+                ? $"{tag} OK IDLE terminated\r\n" : $"{tag} BAD Expected DONE\r\n", ct);
+            return false;
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            await SendAsync("* BYE idle timeout\r\n", ct);
+            return true;
         }
         finally
         {
             _notifier.Received -= OnEvent;
+            idleCts.Cancel();
+            try { await readDone; } catch (OperationCanceledException) { }
         }
-
-        if (timedOut) { await SendAsync("* BYE idle timeout\r\n", ct).ConfigureAwait(false); return true; }
-        await SendAsync($"{tag} OK IDLE terminated\r\n", ct).ConfigureAwait(false);
-        return false;
     }
-
     // ---- Sequence / item parsing ----
 
     private List<(int seq, Message m)> Resolve(string set, bool byUid)
     {
         var result = new List<(int, Message)>();
-        if (_selected.Count == 0 || string.IsNullOrWhiteSpace(set)) return result;
+        if (_selected.Count == 0) { ParseSet(set, 0); return result; }
 
         if (byUid)
         {
-            var maxUid = _selected[^1].Id;
+            var maxUid = Uid(_selected[^1]);
             var wanted = ParseSet(set, maxUid);
             for (var i = 0; i < _selected.Count; i++)
-                if (wanted(_selected[i].Id)) result.Add((i + 1, _selected[i]));
+                if (wanted(Uid(_selected[i]))) result.Add((i + 1, _selected[i]));
         }
         else
         {
@@ -572,12 +683,14 @@ public sealed class ImapSession
     }
 
     // Returns a predicate matching an id/seq against a set like "1:5,7,9:*".
-    private static Func<long, bool> ParseSet(string set, long max)
+    internal static Func<long, bool> ParseSet(string set, long max)
     {
         var ranges = new List<(long lo, long hi)>();
+        if (string.IsNullOrEmpty(set) || set.Split(',').Any(p => p.Length == 0)) throw new FormatException();
         foreach (var part in set.Split(',', StringSplitOptions.RemoveEmptyEntries))
         {
             var seg = part.Split(':');
+            if (seg.Length > 2) throw new FormatException();
             long lo = Bound(seg[0], max);
             long hi = seg.Length > 1 ? Bound(seg[1], max) : lo;
             if (lo > hi) (lo, hi) = (hi, lo);
@@ -585,10 +698,12 @@ public sealed class ImapSession
         }
         return v => ranges.Any(r => v >= r.lo && v <= r.hi);
 
-        static long Bound(string s, long max) => s.Trim() == "*" ? max : (long.TryParse(s, out var n) ? n : 0);
+        static long Bound(string s, long max) => s == "*" ? max :
+            uint.TryParse(s, NumberStyles.None, CultureInfo.InvariantCulture, out var n) && n > 0 ? n : throw new FormatException();
     }
 
-    private readonly record struct FetchItem(string Name, string? Section, string Label);
+    private readonly record struct FetchItem(string Name, string? Section, string Label,
+        uint? Offset = null, uint Count = 0);
 
     private static List<FetchItem> ParseFetchItems(string spec)
     {
@@ -611,10 +726,26 @@ public sealed class ImapSession
             if (bracket >= 0)
             {
                 var end = t.LastIndexOf(']');
-                var section = end > bracket ? t[(bracket + 1)..end] : "";
-                var head = upper[..bracket]; // BODY or BODY.PEEK or RFC822
+                var head = upper[..bracket];
+                if (end < bracket || head is not ("BODY" or "BODY.PEEK"))
+                    throw new FormatException();
+                var section = t[(bracket + 1)..end];
                 var label = $"BODY[{section}]";
-                items.Add(new FetchItem("BODY[section]", section, label));
+                uint? offset = null;
+                uint count = 0;
+                var partial = t[(end + 1)..];
+                if (partial.Length > 0)
+                {
+                    var dot = partial.IndexOf('.');
+                    if (!partial.StartsWith('<') || !partial.EndsWith('>') || dot <= 1 ||
+                        !uint.TryParse(partial.AsSpan(1, dot - 1), NumberStyles.None, CultureInfo.InvariantCulture, out var start) ||
+                        !uint.TryParse(partial.AsSpan(dot + 1, partial.Length - dot - 2), NumberStyles.None, CultureInfo.InvariantCulture, out count) ||
+                        count == 0)
+                        throw new FormatException();
+                    offset = start;
+                    label += "<" + start.ToString(CultureInfo.InvariantCulture) + ">";
+                }
+                items.Add(new FetchItem("BODY[section]", section, label, offset, count));
                 continue;
             }
 
@@ -631,9 +762,10 @@ public sealed class ImapSession
                 case "BODY":
                 case "BODYSTRUCTURE":
                     items.Add(new(upper, null, upper)); break;
-                default: break; // ignore unknown item
+                default: throw new FormatException();
             }
         }
+        if (items.Count == 0) throw new FormatException();
         return items;
 
         static void AddAll(List<FetchItem> l, params string[] names)
@@ -642,13 +774,14 @@ public sealed class ImapSession
         }
     }
 
-    private static List<string> Tokenize(string s)
+    internal static List<string> Tokenize(string s)
     {
         var tokens = new List<string>();
         var i = 0;
         while (i < s.Length)
         {
             if (char.IsWhiteSpace(s[i])) { i++; continue; }
+            if (s[i] == ')') throw new FormatException();
             if (s[i] == '"')
             {
                 var sb = new StringBuilder(); i++;
@@ -657,6 +790,7 @@ public sealed class ImapSession
                     if (s[i] == '\\' && i + 1 < s.Length) { sb.Append(s[i + 1]); i += 2; }
                     else { sb.Append(s[i]); i++; }
                 }
+                if (i >= s.Length) throw new FormatException();
                 i++; tokens.Add(sb.ToString());
             }
             else if (s[i] == '(')
@@ -669,6 +803,7 @@ public sealed class ImapSession
                     else if (s[i] == '"') { i++; while (i < s.Length && s[i] != '"') { if (s[i] == '\\') i++; i++; } }
                     i++;
                 }
+                if (depth != 0) throw new FormatException();
                 tokens.Add(s[start..Math.Min(i, s.Length)]);
             }
             else
@@ -732,6 +867,7 @@ public sealed class ImapSession
             }
             var b = _rbuf[_rpos++];
             if (b == (byte)'\n') { var s = Decode(ms); return s.EndsWith('\r') ? s[..^1] : s; }
+            if (ms.Length >= 65536) throw new IOException("IMAP command line too long.");
             ms.WriteByte(b);
         }
 

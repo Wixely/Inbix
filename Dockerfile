@@ -8,6 +8,7 @@ WORKDIR /src
 COPY Directory.Build.props Directory.Packages.props nuget.config ./
 COPY src/Inbix.Core/Inbix.Core.csproj src/Inbix.Core/
 COPY src/Inbix.Data/Inbix.Data.csproj src/Inbix.Data/
+COPY src/Inbix.Imap/Inbix.Imap.csproj src/Inbix.Imap/
 COPY src/Inbix.Smtp/Inbix.Smtp.csproj src/Inbix.Smtp/
 COPY src/Inbix.Worker/Inbix.Worker.csproj src/Inbix.Worker/
 COPY src/Inbix.Web/Inbix.Web.csproj src/Inbix.Web/

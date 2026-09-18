@@ -61,7 +61,7 @@ public sealed class ImapUnitTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
-    public async Task Mailbox_Model_Maps_Aliases_And_Uid_Is_Message_Id()
+    public async Task Mailbox_Model_Maps_Aliases_To_Repository_Messages()
     {
         var alias = await _sp.GetRequiredService<IAliasRepository>().CreateAsync("spotify", "mydomain.com", null);
         var sink = _sp.GetRequiredService<IInboundMessageSink>();
@@ -72,7 +72,7 @@ public sealed class ImapUnitTests : IAsyncLifetime, IDisposable
         }));
 
         var provider = new ImapMailboxProvider(
-            _sp.GetRequiredService<IAliasRepository>(), _sp.GetRequiredService<IMessageRepository>());
+            _sp.GetRequiredService<IAliasRepository>(), _sp.GetRequiredService<IMessageRepository>(), _sp.GetRequiredService<ISettingsRepository>());
 
         var folders = (await provider.ListAsync(default)).Select(f => f.Name).ToList();
         Assert.Contains("INBOX", folders);
@@ -83,8 +83,20 @@ public sealed class ImapUnitTests : IAsyncLifetime, IDisposable
         var inbox = await provider.GetMessagesAsync("INBOX", default);
         var m = Assert.Single(inbox!);
         var aliasFolder = await provider.GetMessagesAsync("Aliases/spotify@mydomain.com", default);
-        Assert.Equal(m.Id, Assert.Single(aliasFolder!).Id);           // UID == message id
+        Assert.Equal(m.Id, Assert.Single(aliasFolder!).Id); // same repository message in both views
         Assert.Equal(alias.Id, m.AliasId);
+
+        var snapshot = (await provider.SnapshotAsync("INBOX", default))!;
+        var reopenedProvider = new ImapMailboxProvider(_sp.GetRequiredService<IAliasRepository>(),
+            _sp.GetRequiredService<IMessageRepository>(), _sp.GetRequiredService<ISettingsRepository>());
+        var reopened = (await reopenedProvider.SnapshotAsync("inbox", default))!;
+        Assert.NotEqual(1u, snapshot.Validity); // invalidate caches from the legacy UID scheme
+        Assert.Equal(snapshot.Validity, reopened.Validity);
+        Assert.Equal(snapshot.Uids[m.Id], reopened.Uids[m.Id]);
+        await _sp.GetRequiredService<IMessageRepository>().DeleteAsync(m.Id);
+        var empty = (await reopenedProvider.SnapshotAsync("INBOX", default))!;
+        Assert.Empty(empty.Messages);
+        Assert.Equal(snapshot.NextUid, empty.NextUid);
 
         Assert.Null(await provider.GetMessagesAsync("Aliases/nope@mydomain.com", default)); // unknown mailbox
     }

@@ -290,6 +290,27 @@ IMAP `IDLE`. If you'd rather manage mail from the client, set **`Inbix:Imap:Allo
 deleting a message (or moving it to Trash) **permanently removes** it from Inbix (row + raw MIME +
 attachments). It's off by default because it enables real data loss from a mail client.
 
+IMAP messages are presented as already read; read/unread, answered, flagged and draft changes are
+not supported. When `AllowDelete` is enabled, `\Deleted` flags persist per mailbox until cleared or
+expunged. Subscription choices persist too. `NOOP` and `IDLE` reconcile web-side moves and deletions;
+IDLE checks at least every five seconds, as well as reacting to new-mail notifications.
+
+### IMAP compatibility upgrade
+
+The compatibility fixes introduce persistent, mailbox-specific UIDs stored under `imap.v2.*` in the
+existing settings repository. The first connection after upgrading gets a new `UIDVALIDITY`, causing
+clients to rebuild their cached mailbox view once. Stored emails are not rewritten. Preserve the
+settings store in backups; reverting to an older server changes the UID scheme again and requires
+another client resynchronisation. JSON storage also adds `message-sequence.json` to retain the message
+ID high-water mark across deletions and restarts; include it when backing up or restoring the store.
+
+The server supports partial message downloads, original-header envelopes, nested email attachments,
+and the standard search keys with US-ASCII or UTF-8 search strings. This is not a general-purpose
+writable IMAP mailbox: copying, moving and creating folders remain unsupported, as do optional
+extensions such as CONDSTORE/QRESYNC. TLS still uses the existing implicit-TLS certificate setting;
+STARTTLS is not implemented. These changes have automated protocol and MailKit coverage. Message
+retrieval in Aqua Mail on Android was also confirmed working against a deployed build.
+
 ## Storage providers
 
 Inbix has two interchangeable storage backends, selected with `Inbix:Database:Provider`:

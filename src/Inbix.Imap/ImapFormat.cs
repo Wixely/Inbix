@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Text;
-using Inbix.Core.Domain;
 using MimeKit;
 
 namespace Inbix.Imap;
@@ -11,12 +10,12 @@ internal static class ImapFormat
     public static string NString(string? s)
     {
         if (s is null) return "NIL";
+        if (s.Any(c => c < 32 || c > 126))
+            return "{" + System.Text.Encoding.UTF8.GetByteCount(s).ToString(CultureInfo.InvariantCulture) + "}\r\n" + s;
         return "\"" + s.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
     }
 
     public static string InternalDate(DateTimeOffset dt) => "\"" + dt.ToString("dd-MMM-yyyy HH:mm:ss ", CultureInfo.InvariantCulture) + Offset(dt) + "\"";
-
-    private static string Rfc2822(DateTimeOffset dt) => dt.ToString("ddd, dd MMM yyyy HH:mm:ss ", CultureInfo.InvariantCulture) + Offset(dt);
 
     private static string Offset(DateTimeOffset dt)
     {
@@ -24,93 +23,84 @@ internal static class ImapFormat
         return (o < TimeSpan.Zero ? "-" : "+") + Math.Abs(o.Hours).ToString("00") + Math.Abs(o.Minutes).ToString("00");
     }
 
-    // ENVELOPE = (date subject from sender reply-to to cc bcc in-reply-to message-id)
-    public static string Envelope(Message m)
+    // Read the original RFC 5322 headers, including messages not yet processed by the worker.
+    public static string Envelope(MimeMessage m)
     {
-        var from = AddressList(m.Sender);
-        var to = AddressList(m.Recipient);
-        return $"({NString(Rfc2822(m.ReceivedAt))} {NString(m.Subject)} {from} {from} {from} {to} NIL NIL NIL {NString(m.MessageIdHeader)})";
+        var from = AddressList(m.From);
+        var sender = m.Sender is null ? from : AddressList(new InternetAddressList { m.Sender });
+        var reply = m.ReplyTo.Count == 0 ? from : AddressList(m.ReplyTo);
+        return $"({NString(m.Headers[HeaderId.Date])} {NString(HeaderText(m.Subject))} {from} {sender} {reply} " +
+            $"{AddressList(m.To)} {AddressList(m.Cc)} {AddressList(m.Bcc)} " +
+            $"{NString(m.Headers[HeaderId.InReplyTo])} {NString(m.Headers[HeaderId.MessageId])})";
     }
 
-    private static string AddressList(string? address)
+    private static string? HeaderText(string? text) => text is null ? null :
+        System.Text.Encoding.ASCII.GetString(MimeKit.Utils.Rfc2047.EncodeText(System.Text.Encoding.UTF8, text))
+            .Replace("\r", "").Replace("\n", " ");
+
+    private static string AddressList(InternetAddressList addresses)
     {
-        if (string.IsNullOrWhiteSpace(address)) return "NIL";
-        string? name = null, mailbox, host = null;
-        try
+        if (addresses.Count == 0) return "NIL";
+        var result = new StringBuilder("(");
+        void Add(InternetAddress address)
         {
-            var mb = MailboxAddress.Parse(address);
-            name = string.IsNullOrEmpty(mb.Name) ? null : mb.Name;
-            var at = mb.Address.LastIndexOf('@');
-            (mailbox, host) = at > 0 ? (mb.Address[..at], mb.Address[(at + 1)..]) : (mb.Address, null);
+            if (address is GroupAddress group)
+            {
+                result.Append($"(NIL NIL {NString(HeaderText(group.Name))} NIL)");
+                foreach (var member in group.Members) Add(member);
+                result.Append("(NIL NIL NIL NIL)");
+            }
+            else if (address is MailboxAddress mailbox)
+            {
+                var at = mailbox.Address.LastIndexOf('@');
+                result.Append($"({NString(HeaderText(string.IsNullOrEmpty(mailbox.Name) ? null : mailbox.Name))} NIL " +
+                    $"{NString(at < 0 ? mailbox.Address : mailbox.Address[..at])} {NString(at < 0 ? null : mailbox.Address[(at + 1)..])})");
+            }
         }
-        catch
-        {
-            var at = address.LastIndexOf('@');
-            (mailbox, host) = at > 0 ? (address[..at], address[(at + 1)..]) : (address, null);
-        }
-        return $"(({NString(name)} NIL {NString(mailbox)} {NString(host)}))";
+        foreach (var address in addresses) Add(address);
+        return result.Append(')').ToString();
     }
 
-    // ---- BODYSTRUCTURE ----
-
-    public static string BodyStructure(MimeEntity entity)
+    public static string BodyStructure(MimeEntity? entity)
     {
-        if (entity is Multipart mp)
-        {
-            var sb = new StringBuilder("(");
-            foreach (var child in mp) sb.Append(BodyStructure(child));
-            sb.Append(' ').Append(NString(mp.ContentType.MediaSubtype));
-            sb.Append(')');
-            return sb.ToString();
-        }
-
+        if (entity is null) return "(\"TEXT\" \"PLAIN\" NIL NIL NIL \"7BIT\" 0 0)";
+        if (entity is Multipart multipart)
+            return "(" + string.Concat(multipart.Select(BodyStructure)) + " " + NString(multipart.ContentType.MediaSubtype) + ")";
         var ct = entity.ContentType;
-        var type = ct.MediaType;
-        var (octets, lines) = Measure(entity);
-        var paramList = Params(ct);
-        var id = NString(entity.ContentId);
-        // body-fld-enc is a STRING (RFC 3501) — must be quoted, or strict clients skip decoding
-        // (e.g. quoted-printable text then shows literal "=" artifacts).
-        var enc = NString(Encoding(entity is MimePart p ? p.ContentTransferEncoding : ContentEncoding.SevenBit));
-
-        if (type.Equals("text", StringComparison.OrdinalIgnoreCase))
-            return $"({NString(type)} {NString(ct.MediaSubtype)} {paramList} {id} NIL {enc} {octets} {lines})";
-
-        return $"({NString(type)} {NString(ct.MediaSubtype)} {paramList} {id} NIL {enc} {octets})";
+        var body = TextBlock(Serialize(entity));
+        var lines = body.Count(b => b == '\n');
+        var encoding = entity.Headers[HeaderId.ContentTransferEncoding] ?? "7BIT";
+        var fields = $"{NString(ct.MediaType)} {NString(ct.MediaSubtype)} {Params(ct)} " +
+            $"{NString(entity.Headers[HeaderId.ContentId])} {NString(HeaderText(entity.Headers[HeaderId.ContentDescription]))} " +
+            $"{NString(encoding.ToUpperInvariant())} {body.Length}";
+        if (entity is MessagePart nested && nested.Message is not null)
+            return $"({fields} {Envelope(nested.Message)} {BodyStructure(nested.Message.Body)} {lines})";
+        return ct.MediaType.Equals("text", StringComparison.OrdinalIgnoreCase)
+            ? $"({fields} {lines})" : $"({fields})";
     }
 
-    private static string Params(ContentType ct)
+    private static string Params(ContentType ct) => ct.Parameters.Count == 0 ? "NIL" :
+        "(" + string.Join(" ", ct.Parameters.Select(p => NString(p.Name) + " " + NString(HeaderText(p.Value)))) + ")";
+
+    private static byte[] Serialize(MimeEntity entity)
     {
-        var ps = new List<string>();
-        if (!string.IsNullOrEmpty(ct.Charset)) { ps.Add(NString("CHARSET")); ps.Add(NString(ct.Charset)); }
-        if (!string.IsNullOrEmpty(ct.Name)) { ps.Add(NString("NAME")); ps.Add(NString(ct.Name)); }
-        return ps.Count == 0 ? "NIL" : "(" + string.Join(" ", ps) + ")";
+        using var stream = new MemoryStream();
+        var options = FormatOptions.Default.Clone();
+        options.NewLineFormat = NewLineFormat.Dos;
+        entity.WriteTo(options, stream);
+        return stream.ToArray();
     }
 
-    private static string Encoding(ContentEncoding e) => e switch
+    private static byte[] Serialize(MimeMessage message)
     {
-        ContentEncoding.EightBit => "8BIT",
-        ContentEncoding.Binary => "BINARY",
-        ContentEncoding.Base64 => "BASE64",
-        ContentEncoding.QuotedPrintable => "QUOTED-PRINTABLE",
-        ContentEncoding.UUEncode => "X-UUENCODE",
-        _ => "7BIT",
-    };
-
-    private static (long octets, int lines) Measure(MimeEntity entity)
-    {
-        if (entity is not MimePart part || part.Content is null) return (0, 0);
-        using var ms = new MemoryStream();
-        part.Content.WriteTo(ms);
-        var bytes = ms.GetBuffer();
-        var len = ms.Length;
-        var lines = 0;
-        for (long i = 0; i < len; i++) if (bytes[i] == (byte)'\n') lines++;
-        return (len, lines);
+        using var stream = new MemoryStream();
+        var options = FormatOptions.Default.Clone();
+        options.NewLineFormat = NewLineFormat.Dos;
+        message.WriteTo(options, stream);
+        return stream.ToArray();
     }
-
     // ---- Body-section extraction (BODY[<section>]) ----
-    // Returns the bytes for a section, or null if it can't be resolved (caller falls back to whole message).
+    // Returns section bytes, or null for a nonexistent section (the FETCH response then uses NIL).
 
     public static byte[]? Section(byte[] raw, string section)
     {
@@ -126,7 +116,7 @@ internal static class ImapFormat
         try
         {
             using var stream = new MemoryStream(raw);
-            var message = MimeMessage.Load(stream);
+            using var message = MimeMessage.Load(stream);
             return message.Body is null ? null : PartSection(message.Body, upper);
         }
         catch
@@ -137,62 +127,32 @@ internal static class ImapFormat
 
     private static byte[]? PartSection(MimeEntity root, string spec)
     {
-        string? suffix = null;
-        foreach (var s in new[] { ".MIME", ".HEADER", ".TEXT" })
-            if (spec.EndsWith(s, StringComparison.Ordinal)) { suffix = s; spec = spec[..^s.Length]; break; }
-
-        var nums = new List<int>();
-        foreach (var p in spec.Split('.', StringSplitOptions.RemoveEmptyEntries))
-            if (int.TryParse(p, out var n)) nums.Add(n); else return null;
-
-        var entity = Navigate(root, nums);
+        var match = System.Text.RegularExpressions.Regex.Match(spec, @"^(\d+(?:\.\d+)*)(?:\.(.*))?$",
+            System.Text.RegularExpressions.RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
+        if (!match.Success) return null;
+        var numbers = match.Groups[1].Value.Split('.');
+        MimeEntity? entity = root;
+        for (var i = 0; i < numbers.Length; i++)
+        {
+            if (!int.TryParse(numbers[i], out var n) || n < 1) return null;
+            var embedded = i > 0 && entity is MessagePart;
+            if (embedded) entity = ((MessagePart)entity!).Message?.Body;
+            if (entity is Multipart mp)
+            {
+                if (n > mp.Count) return null;
+                entity = mp[n - 1];
+            }
+            else if (entity is null || n != 1 || i > 0 && !embedded)
+                return null;
+        }
         if (entity is null) return null;
-
-        if (suffix == ".MIME") return HeadersOf(entity);
-        if (entity is MimePart part && suffix is null)
-        {
-            using var ms = new MemoryStream();
-            part.Content?.WriteTo(ms);
-            return ms.ToArray();
-        }
-        // Fallback: write the whole entity (headers + content).
-        using var all = new MemoryStream();
-        entity.WriteTo(all);
-        return all.ToArray();
+        var suffix = match.Groups[2].Value;
+        if (suffix == "MIME") return HeaderBlock(Serialize(entity));
+        if (suffix.Length == 0) return TextBlock(Serialize(entity));
+        if (entity is MessagePart nested && nested.Message is not null)
+            return Section(Serialize(nested.Message), suffix);
+        return null;
     }
-
-    private static MimeEntity? Navigate(MimeEntity current, List<int> nums)
-    {
-        for (var depth = 0; depth < nums.Count; depth++)
-        {
-            var n = nums[depth];
-            if (current is Multipart mp)
-            {
-                if (n < 1 || n > mp.Count) return null;
-                current = mp[n - 1];
-            }
-            else if (current is MessagePart msg && msg.Message is not null)
-            {
-                current = msg.Message.Body;
-                if (current is Multipart inner) { if (n < 1 || n > inner.Count) return null; current = inner[n - 1]; }
-                else if (n != 1) return null;
-            }
-            else
-            {
-                // Single leaf part: section "1" refers to it; anything deeper is invalid.
-                if (n != 1 || depth != nums.Count - 1) return null;
-            }
-        }
-        return current;
-    }
-
-    private static byte[] HeadersOf(MimeEntity entity)
-    {
-        using var ms = new MemoryStream();
-        entity.Headers.WriteTo(ms);
-        return ms.ToArray();
-    }
-
     // ---- Raw header/body splitting (no MIME parse) ----
 
     private static int BodyStart(byte[] raw)

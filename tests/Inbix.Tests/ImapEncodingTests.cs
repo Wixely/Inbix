@@ -75,14 +75,59 @@ public sealed class ImapEncodingTests : IAsyncLifetime
         Assert.DoesNotContain(" QUOTED-PRINTABLE ", fetch);            // never a bare atom
     }
 
+    [Theory]
+    [InlineData("BODY.PEEK[]<0.4>", "BODY[]<0>", "From")]
+    [InlineData("BODY[]<6.3>", "BODY[]<6>", "a@b")]
+    [InlineData("BODY.PEEK[TEXT]<0.4>", "BODY[TEXT]<0>", "soft")]
+    [InlineData("BODY.PEEK[1]<5.7>", "BODY[1]<5>", "wrapped")]
+    [InlineData("BODY.PEEK[HEADER.FIELDS (SUBJECT)]<0.999>", "BODY[HEADER.FIELDS (SUBJECT)]<0>", "Subject: QP\r\n\r\n")]
+    [InlineData("BODY.PEEK[HEADER.FIELDS (SUBJECT)]<9.2>", "BODY[HEADER.FIELDS (SUBJECT)]<9>", "QP")]
+    [InlineData("BODY.PEEK[TEXT]<999999.10>", "BODY[TEXT]<999999>", "")]
+    [InlineData("BODY.PEEK[TEXT]<4294967295.10>", "BODY[TEXT]<4294967295>", "")]
+    [InlineData("BODY.PEEK[HEADER.FIELDS (SUBJECT)]", "BODY[HEADER.FIELDS (SUBJECT)]", "Subject: QP\r\n\r\n")]
+    public async Task Fetch_Returns_Requested_Bytes_And_Origin(string item, string label, string expected)
+    {
+        using var tcp = new TcpClient();
+        await tcp.ConnectAsync(IPAddress.Loopback, _port);
+        using var reader = new StreamReader(tcp.GetStream());
+        await using var writer = new StreamWriter(tcp.GetStream()) { NewLine = "\r\n", AutoFlush = true };
+        await reader.ReadLineAsync();
+        await SendAsync(writer, reader, "a1 LOGIN admin admin", "a1");
+        await SendAsync(writer, reader, "a2 EXAMINE INBOX", "a2");
+
+        var fetch = await SendAsync(writer, reader, $"a3 UID FETCH 1 ({item} FLAGS)", "a3");
+        Assert.Equal($"* 1 FETCH (UID 1 {label} {{{Encoding.UTF8.GetByteCount(expected)}}}\r\n" +
+            expected + " FLAGS (\\Seen))\r\na3 OK UID FETCH completed\r\n", fetch);
+    }
+
+    [Theory]
+    [InlineData("<0.0>")]
+    [InlineData("<-1.10>")]
+    [InlineData("<0.4294967296>")]
+    [InlineData("<0>")]
+    [InlineData("<0.10>garbage")]
+    public async Task Invalid_Partial_Fetch_Is_Rejected_Without_Losing_Session(string partial)
+    {
+        using var tcp = new TcpClient();
+        await tcp.ConnectAsync(IPAddress.Loopback, _port);
+        using var reader = new StreamReader(tcp.GetStream());
+        await using var writer = new StreamWriter(tcp.GetStream()) { NewLine = "\r\n", AutoFlush = true };
+        await reader.ReadLineAsync();
+        await SendAsync(writer, reader, "a1 LOGIN admin admin", "a1");
+        await SendAsync(writer, reader, "a2 EXAMINE INBOX", "a2");
+        var fetch = await SendAsync(writer, reader, $"a3 UID FETCH 1 (BODY.PEEK[]{partial})", "a3");
+        Assert.StartsWith("a3 BAD ", fetch);
+        Assert.Equal("a4 OK NOOP completed\r\n", await SendAsync(writer, reader, "a4 NOOP", "a4"));
+    }
+
     private static async Task<string> SendAsync(StreamWriter w, StreamReader r, string command, string tag)
     {
         await w.WriteLineAsync(command);
         var sb = new StringBuilder();
         string? line;
-        while ((line = await r.ReadLineAsync()) is not null)
+        while ((line = await r.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(5))) is not null)
         {
-            sb.AppendLine(line);
+            sb.Append(line).Append("\r\n");
             if (line.StartsWith(tag + " ", StringComparison.Ordinal)) break; // tagged completion
         }
         return sb.ToString();

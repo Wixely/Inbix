@@ -31,6 +31,7 @@ public sealed class JsonDataStore : IReloadableStore
     private readonly string _rulesPath;
     private readonly string _identitiesPath;
     private readonly string _auditPath;
+    private readonly string _messageSequencePath;
 
     // In-memory index. Reassigned wholesale on reload; only ever touched under the gate.
     internal Dictionary<long, StoredAlias> Aliases { get; private set; } = [];
@@ -54,6 +55,7 @@ public sealed class JsonDataStore : IReloadableStore
         _rulesPath = Path.Combine(_root, "rules.json");
         _identitiesPath = Path.Combine(_root, "identities.json");
         _auditPath = Path.Combine(_root, "audit.jsonl");
+        _messageSequencePath = Path.Combine(_root, "message-sequence.json");
     }
 
     public bool CanReload => true;
@@ -134,7 +136,11 @@ public sealed class JsonDataStore : IReloadableStore
             await LoadMessagesAsync(dir, messages, ct).ConfigureAwait(false);
         }
 
-        // Commit the freshly built index.
+        var sequence = await _io.ReadAsync<MessageSequence>(_messageSequencePath, ct).ConfigureAwait(false);
+        var nextMessage = Math.Max(Math.Max(_nextMessage, NextFrom(messages.Keys)), sequence?.NextId ?? 1);
+        await _io.WriteAsync(_messageSequencePath, new MessageSequence { NextId = nextMessage }, ct).ConfigureAwait(false);
+
+        // Commit the freshly built index only after all reads/reservations succeed.
         Aliases = aliases;
         Messages = messages;
         Rules = rules;
@@ -143,7 +149,7 @@ public sealed class JsonDataStore : IReloadableStore
         Audit = audit;
 
         _nextAlias = NextFrom(aliases.Keys);
-        _nextMessage = NextFrom(messages.Keys);
+        _nextMessage = nextMessage;
         _nextRule = NextFrom(rules.Select(r => r.Id));
         _nextIdentity = NextFrom(identities.Select(i => i.Id));
         _nextAudit = NextFrom(audit.Select(a => a.Id));
@@ -246,7 +252,16 @@ public sealed class JsonDataStore : IReloadableStore
     // --- Id allocation (callers already hold the gate) ---------------------------------------------
 
     internal long NextAliasId() => _nextAlias++;
-    internal long NextMessageId() => _nextMessage++;
+    internal async Task<long> NextMessageIdAsync(CancellationToken ct)
+    {
+        var id = _nextMessage;
+        var next = checked(id + 1);
+        // Reserve before publishing the message; a failed write may leave a gap, never a reused id.
+        await _io.WriteAsync(_messageSequencePath, new MessageSequence { NextId = next }, ct).ConfigureAwait(false);
+        _nextMessage = next;
+        return id;
+    }
+    private sealed class MessageSequence { public long NextId { get; set; } }
     internal long NextRuleId() => _nextRule++;
     internal long NextIdentityId() => _nextIdentity++;
     internal long NextBodyId() => _nextBody++;
