@@ -11,12 +11,12 @@
     <PackageVersion Include="MailKit" Version="4.17.0" />
     <!-- Data access -->
     <PackageVersion Include="Dapper" Version="2.1.79" />
-    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.14" />
     <!-- Hosting / Windows Service -->
-    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.9" />
-    <PackageVersion Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.14" />
     <!-- API docs -->
-    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.14" />
     <!-- DNS lookups for the diagnostics page (MX/A/PTR) -->
     <PackageVersion Include="DnsClient" Version="1.8.0" />
     <!-- Tests -->
